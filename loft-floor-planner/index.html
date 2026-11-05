@@ -20,19 +20,10 @@
 :root{
   --bg:#f0eeeb; --panel:#fbfaf8; --ink:#25221f; --muted:#6e6760; --line:#dcd4cc; --hover:#ebe6df;
   --chalk:#2361c4; --saw:#cf5d1a; --good:#2f7d4b;
-  --wall:#d8b2a3; --sub:#cbbb9b; --hatch:#a0948b;
+  --wall:#33433b; --sub:#cdbb98; --hatch:#4b5d53; --hatchbg:#c9d8ce; --joint:#6c5539; color-scheme:light;
   --f-ui:"Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
   --f-num:"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
 }
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#1a1918; --panel:#232120; --ink:#ece7e1; --muted:#a39a91; --line:#3a3532; --hover:#2d2a28;
-  --chalk:#7aa8ff; --saw:#ff8c4a; --good:#5fbf7f;
-  --wall:#8a6a5f; --sub:#4b4336; --hatch:#6e655e; color-scheme:dark}}
-:root[data-theme="dark"]{
-  --bg:#1a1918; --panel:#232120; --ink:#ece7e1; --muted:#a39a91; --line:#3a3532; --hover:#2d2a28;
-  --chalk:#7aa8ff; --saw:#ff8c4a; --good:#5fbf7f;
-  --wall:#8a6a5f; --sub:#4b4336; --hatch:#6e655e; color-scheme:dark}
-
 body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:15px;line-height:1.4}
 .wrap{max-width:1560px;margin:0 auto;padding-block:20px 48px;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
@@ -88,12 +79,12 @@ tbody tr:hover{background:var(--hover)}
 /* SVG */
 .s-sub{fill:var(--sub)}
 .s-room{fill:none;stroke:var(--ink);stroke-width:40}
-.s-board{stroke:#9f8155;stroke-width:4}
+.s-board{stroke:var(--joint);stroke-width:7;stroke-linejoin:miter}
 .s-chalk{stroke:var(--chalk);stroke-width:28}
 .s-notch{fill:none;stroke:var(--saw);stroke-width:16;stroke-dasharray:60 34}
-.s-wall{fill:var(--wall);stroke:var(--ink);stroke-width:10}
-.s-hbg{fill:var(--panel)}
-.s-hln{stroke:var(--hatch);stroke-width:14}
+.s-wall{fill:var(--wall);stroke:#ece7dc;stroke-width:10}
+.s-hbg{fill:var(--hatchbg)}
+.s-hln{stroke:var(--hatch);stroke-width:12;fill:none}
 .s-t{fill:var(--ink);font-family:var(--f-num)}
 .s-ui{font-family:var(--f-ui);font-weight:700;letter-spacing:.08em}
 .s-m{fill:var(--muted)}
@@ -106,7 +97,7 @@ tbody tr:hover{background:var(--hover)}
 .s-st{stroke:var(--muted);stroke-width:8;stroke-dasharray:30 30;fill:none}
 td .w3{color:var(--saw)}
 .warn{color:var(--saw)}
-.s-grain{stroke:#8a6b40;stroke-opacity:.13;stroke-width:3}
+.s-grain{stroke:#6f5332;stroke-opacity:.5;stroke-width:5;fill:none}
 @media (prefers-reduced-motion:no-preference){.s-hl{transition:y .12s}}
 </style>
 
@@ -195,7 +186,7 @@ td .w3{color:var(--saw)}
         <div class="bar">
           <h2>Floor plan</h2>
           <div class="legend">
-            <span><i class="sw" style="background:#dcc39b;border:1px solid #9f8155"></i>Light oak board</span>
+            <span><i class="sw" style="background:#e2c9a0;border:1.5px solid #6c5539"></i>Light oak board</span>
             <span><i class="sw" style="background:var(--chalk)"></i>Cut at left wall</span>
             <span><i class="sw" style="border:2px dashed var(--saw)"></i>Cut around stair wall</span>
             <span><i class="sw" style="background:var(--wall);border:1px solid var(--ink)"></i>Stair walls</span>
@@ -381,8 +372,9 @@ function compute0(p){
     backVar:Ybmax-Ybmin,frontVar:Yfmax-Yfmin};
 }
 
-const OAK=['#dcc39b','#e4cda7','#d5b98d','#e0c79f','#d2b388','#e7d3b0','#d9bd92'];
-const tone=(i,j)=>OAK[(i*5+j*3+((i*j)%4))%OAK.length];
+const OAK=['#e2c9a0','#ecdcbe','#d6b88b','#e8d4b1','#dcc096','#efe1c6','#d2b283','#e5ceab'];
+const hsh=(i,j)=>{let h=(i*73856093)^(j*19349663);h=(h^(h>>>13))*1274126177;return (h^(h>>>16))>>>0;};
+const tone=(i,j)=>OAK[hsh(i,j)%OAK.length];
 const mm=v=>Math.round(v).toLocaleString('en-GB');
 const m2=v=>v.toFixed(2);
 const w3=ws=>ws.map(mm).join(' / ');
@@ -422,6 +414,16 @@ function renderCallouts(p,R){
   $('callouts').innerHTML=cards.map(c=>`<div class="co"><div class="k">${c.k}<span class="chip ${c.chip[0]}">${c.chip[1]}</span></div><div class="v">${c.v}</div><div class="d">${c.d}</div></div>`).join('');
 }
 
+
+const GN=6;
+const GRAIN=(()=>{let seed=11;const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};let out='';
+  for(let k=0;k<GN;k++){const W=900+Math.round(rnd()*900),H=150+Math.round(rnd()*80);let d='';
+    const n=4+Math.floor(rnd()*3);
+    for(let l=0;l<n;l++){const y=(l+.5)*H/n+(rnd()-.5)*12,a=(rnd()-.5)*26,b=(rnd()-.5)*26;
+      d+=`M0 ${y.toFixed(1)} C ${(W*.3).toFixed(0)} ${(y+a).toFixed(1)}, ${(W*.65).toFixed(0)} ${(y+b).toFixed(1)}, ${W} ${y.toFixed(1)} `;
+      if(rnd()<.45){const cx=W*(.25+rnd()*.5),rx=60+rnd()*140,ry=6+rnd()*9;d+=`M${(cx-rx).toFixed(0)} ${(y+2).toFixed(1)} Q ${cx.toFixed(0)} ${(y-ry*2).toFixed(1)}, ${(cx+rx).toFixed(0)} ${(y+2).toFixed(1)} `;}}
+    out+=`<pattern id="g${k}" width="${W}" height="${H}" patternUnits="userSpaceOnUse" patternTransform="translate(${Math.round(rnd()*W)} ${Math.round(rnd()*H)})"><path class="s-grain" d="${d}"/></pattern>`;}
+  return out;})();
 function renderPlan(p,R){
   const {RL,RW,gap}=R,mL=1150,mR=1150,mT=800,mB=760;
   const fs=Math.max(80,Math.min(R.bw*.6,130));
@@ -430,20 +432,22 @@ function renderPlan(p,R){
   const pts=a=>a.map(q=>q.join(',')).join(' ');
   const ip=[[gap,R.yB[0]+gap],[R.XS[1],R.yB[1]+gap],[RL-gap,R.yB[2]+gap],[RL-gap,R.yF[2]-gap],[R.XS[1],R.yF[1]-gap],[gap,R.yF[0]-gap]];
   let h=`<defs>
-    <pattern id="grain" width="1700" height="61" patternUnits="userSpaceOnUse"><path class="s-grain" d="M0 18 C 400 10, 800 26, 1700 16 M0 44 C 500 52, 1100 36, 1700 46"/></pattern>
-    <pattern id="hatch" width="120" height="120" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect class="s-hbg" width="120" height="120"/><line class="s-hln" x1="0" y1="0" x2="0" y2="120"/></pattern>
+    ${GRAIN}
+    
     <clipPath id="floorClip"><polygon points="${pts(ip)}"/></clipPath>
   </defs>`;
   h+=`<polygon class="s-sub" points="${pts(R.poly)}"/>`;
   h+=`<g clip-path="url(#floorClip)">`;
   for(const r of R.rows){r.pieces.forEach((pc,j)=>{if(pc.hidden)return;
-    h+=`<rect class="s-board" x="${pc.x0+2}" y="${r.y+2}" width="${Math.max(1,pc.x1-pc.x0-4)}" height="${Math.max(1,r.w-4)}" fill="${tone(r.i,j)}"><title>Row ${r.i+1}: ${mm(pc.len)} mm</title></rect>`;});}
-  h+=`<rect x="0" y="0" width="${RL}" height="${RW}" fill="url(#grain)" pointer-events="none"/>`;
+    const bx=pc.x0+3,by=r.y+3,bw2=Math.max(1,pc.x1-pc.x0-6),bh=Math.max(1,r.w-6),g=hsh(r.i+7,j+3)%GN;
+    h+=`<g><title>Row ${r.i+1}: ${mm(pc.len)} mm</title><rect x="${bx}" y="${by}" width="${bw2}" height="${bh}" fill="${tone(r.i,j)}"/>`+
+       `<rect x="${bx}" y="${by}" width="${bw2}" height="${bh}" fill="url(#g${g})" pointer-events="none"/>`+
+       `<rect class="s-board" x="${bx}" y="${by}" width="${bw2}" height="${bh}" fill="none"/></g>`;});}
   for(const r of R.rows){const pc=r.pieces[0];if(r.s<R.L-.5)h+=`<line class="s-chalk" x1="${pc.x0+14}" y1="${r.y+6}" x2="${pc.x0+14}" y2="${r.y+r.w-6}"/>`;
     for(const q of r.pieces)if(q.notch&&!q.hidden)h+=`<rect class="s-notch" x="${q.x0+10}" y="${r.y+10}" width="${q.x1-q.x0-20}" height="${r.w-20}"/>`;}
   h+=`</g>`;
   for(const e of R.ex)h+=e.kind==='wall'?`<rect class="s-wall" x="${e.x0}" y="${e.y0}" width="${e.x1-e.x0}" height="${e.y1-e.y0}"/>`
-    :`<rect x="${e.x0}" y="${e.y0}" width="${e.x1-e.x0}" height="${e.y1-e.y0}" fill="url(#hatch)"/>`;
+    :`<rect class="s-hbg" x="${e.x0}" y="${e.y0}" width="${e.x1-e.x0}" height="${e.y1-e.y0}"/><path class="s-hln" d="M${e.x0+20} ${e.y0+20}H${e.x1-20}V${e.y1-20}H${e.x0+20}Z M${e.x0+20} ${e.y0+20}L${e.x1-20} ${e.y1-20} M${e.x1-20} ${e.y0+20}L${e.x0+20} ${e.y1-20}"/>`;
   h+=`<rect id="hl" class="s-hl" x="-40" y="0" width="${RL+80}" height="0" visibility="hidden"/>`;
   h+=`<polygon class="s-room" points="${pts(R.poly)}" stroke-linejoin="miter"/>`;
 
