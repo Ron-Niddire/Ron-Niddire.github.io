@@ -138,12 +138,14 @@ td .w3{color:var(--saw)}
       </fieldset>
 
       <fieldset><legend>Chalk line</legend>
+        <div class="f"><label for="lineAt">Put the line</label>
+          <select id="lineAt"><option value="row2">At the start of row 2</option><option value="offset">At a set distance</option></select></div>
         <div class="f"><label for="offL">From front-left corner <small>(mm)</small></label><input id="offL" type="number" step="1" min="0"></div>
         <div class="f"><label for="lineDir">Line runs</label>
           <select id="lineDir"><option value="split">Split the difference</option><option value="front">Parallel to front wall</option><option value="back">Parallel to back wall</option><option value="custom">Custom right end</option></select></div>
         <div class="f"><label for="offR">From front-right corner <small>(mm)</small></label><input id="offR" type="number" step="1" min="0"></div>
         <div class="f"><label for="offMid">Front wall to line, middle <small>(mm)</small></label><input id="offMid" type="number" step="1" min="0" placeholder="straight"></div>
-        <p class="hint">Measured square off the front wall. The boards run parallel to the line. Leave the middle box empty to treat the front wall as straight. Fill it in once the line is struck and the plan shows where the bow is.</p>
+        <p class="hint">"At the start of row 2" puts the line on the front edge of row 1, measured off the back wall. The front-corner boxes then fill in for you. "At a set distance" uses the front-left distance you type, measured square off the front wall. The boards run parallel to the line. Leave the middle box empty to treat the front wall as straight. Fill it in once the line is struck and the plan shows where the bow is.</p>
       </fieldset>
 
       <fieldset><legend>Boards</legend>
@@ -230,8 +232,8 @@ td .w3{color:var(--saw)}
 </div>
 
 <script>
-const F=['roomL','gap','wL','wM','wMidX','wR','offL','lineDir','offR','offMid','boardL','boardW','perPack','kerf','mode','minPiece','minStagger','rip','minRow','stairOn','stairSide','stairX','stairT','stairInner','stairDepth','stairFloored','spare','rollM2'];
-const DEF={roomL:11.8,gap:10,wL:4.4,wM:4.4,wMidX:5.9,wR:4.4,offL:1000,lineDir:'split',offR:1000,offMid:null,
+const F=['roomL','gap','wL','wM','wMidX','wR','lineAt','offL','lineDir','offR','offMid','boardL','boardW','perPack','kerf','mode','minPiece','minStagger','rip','minRow','stairOn','stairSide','stairX','stairT','stairInner','stairDepth','stairFloored','spare','rollM2'];
+const DEF={roomL:11.8,gap:10,wL:4.4,wM:4.4,wMidX:5.9,wR:4.4,lineAt:'row2',offL:1000,lineDir:'split',offR:1000,offMid:null,
   boardL:1286,boardW:192,perPack:8,kerf:3,mode:'offcut',minPiece:300,minStagger:300,rip:'auto',minRow:60,
   stairOn:true,stairSide:'front',stairX:7.87,stairT:100,stairInner:0.9,stairDepth:2.2,stairFloored:false,spare:5,rollM2:15};
 const NULLABLE=new Set(['offMid']);
@@ -256,6 +258,18 @@ function read(){const p={};for(const k of F){const el=$(k);
   return p;}
 
 function compute(p){
+  if(p.lineAt!=='row2')return compute0(p);
+  // line sits on the row 1 / row 2 joint: iterate so a measured middle offset stays relative to that line
+  let q={...p},R=compute0(q);
+  for(let k=0;k<6&&R.bounds.length;k++){
+    const fL=R.yF[0]-R.bounds[0];if(Math.abs(fL-q.offL)<0.5)break;
+    q={...q,offR:q.offR+(fL-q.offL),offL:fL};R=compute0(q);}
+  if(!R.bounds.length)return R;
+  const b1=R.bounds[0];
+  R.Yline=b1;R.D=R.yF.map(y=>y-b1);R.backDist=R.yB.map(y=>b1-y);R.joint=null;R.atRow2=true;
+  return R;
+}
+function compute0(p){
   const L=p.boardL,bw=p.boardW,gap=p.gap,kerf=p.kerf,minP=p.minPiece;
   const RL=p.roomL*1000,UL=RL-2*gap,xm=p.wMidX*1000;
   const XS=[0,xm,RL],W=[p.wL,p.wM,p.wR].map(v=>v*1000);
@@ -385,14 +399,18 @@ function renderCallouts(p,R){
     if(mx-mn>2)return `Scribe to the ${wall} wall: it tapers ${mm(mx-mn)} mm along the room. Left / middle / right shown.`;
     return mn<p.minRow?'Narrower than your limit. Set "Rip first row" to balance it.':`Same width the full length.`;};
   const j=R.joint;
+  const lineCard=R.atRow2?{k:'Chalk line off back wall',chip:['info','Start of row 2'],
+     v:`${mm(R.backDist[0])} / ${mm(R.backDist[2])} mm`,
+     d:`Mark this far off the back wall at the left and right gables (${mm(R.backDist[1])} mm in the middle), then snap the line. It's the front edge of row 1, so row 2 sits on it. These distances include the ${mm(p.gap)} mm expansion gap.`}
+    :{k:'Chalk line',chip:['info',{split:'Split',front:'∥ front',back:'∥ back',custom:'Custom'}[p.lineDir]],
+     v:`${mm(R.D[0])} / ${mm(R.D[2])} mm`,
+     d:`From the front wall at the left and right gables. Back wall to the line is ${mm(R.backDist[0])} mm at the left and ${mm(R.backDist[2])} mm at the right.`+
+       (j?` The nearest board joint (after row ${j.after}) sits ${mm(Math.abs(j.d))} mm ${j.d>=0?'behind':'in front of'} the line.`:'')};
   const cards=[
     {k:'First board, back-left',chip:firstCut?['cut','Cut needed']:['ok','No cut'],
      v:firstCut?`Cut to ${mm(r0.s)} mm`:`Full ${mm(R.L)} mm`,
      d:firstCut?`A full board would leave a ${mm((R.UL-R.L)%R.L)} mm scrap at the right wall. Cutting it keeps the end piece at ${mm(r0.e)} mm.`:`Row 1 finishes with a ${r0.e?mm(r0.e)+' mm':'perfect'} piece at the right wall.`},
-    {k:'Chalk line',chip:['info',{split:'Split',front:'∥ front',back:'∥ back',custom:'Custom'}[p.lineDir]],
-     v:`${mm(R.D[0])} / ${mm(R.D[2])} mm`,
-     d:`From the front wall at the left and right gables. Back wall to the line is ${mm(R.backDist[0])} mm at the left and ${mm(R.backDist[2])} mm at the right.`+
-       (j?` The nearest board joint (after row ${j.after}) sits ${mm(Math.abs(j.d))} mm ${j.d>=0?'behind':'in front of'} the line.`:'')},
+    lineCard,
     {k:'Row 1, back wall',chip:rowState(r0.ws,R.bw),v:w3(r0.ws),d:rowNote(r0.ws,'back')},
     {k:`Row ${R.rows.length}, front wall`,chip:rowState(last.ws,R.bw),v:w3(last.ws),d:rowNote(last.ws,'front')},
     {k:'Boards to buy',chip:['info',`+${p.spare}% spare`],v:`${R.withSpare} boards`,
@@ -484,8 +502,8 @@ function renderTable(R){
 }
 
 let R=null;
-function syncLine(p,R){const el=$('offR');el.disabled=p.lineDir!=='custom';if(el.disabled)el.value=Math.round(R.D[2]);}
-function update(){const p=read();R=compute(p);syncLine(p,R);p.offR=R.D[2];save(p);renderCallouts(p,R);renderPlan(p,R);renderTable(R);}
+function syncLine(p,R){const r2=p.lineAt==='row2',el=$('offR'),eL=$('offL');eL.disabled=r2;if(r2)eL.value=Math.round(R.D[0]);el.disabled=p.lineDir!=='custom'||r2;if(el.disabled)el.value=Math.round(R.D[2]);}
+function update(){const p=read();R=compute(p);syncLine(p,R);p.offR=Math.round(R.D[2]);if(p.lineAt==='row2')p.offL=Math.round(R.D[0]);save(p);renderCallouts(p,R);renderPlan(p,R);renderTable(R);}
 $('rows').addEventListener('mouseover',e=>{const tr=e.target.closest('tr');const hl=$('hl');if(!tr||!hl||!R)return;
   const r=R.rows[+tr.dataset.r];hl.setAttribute('y',r.y);hl.setAttribute('height',r.w);hl.setAttribute('visibility','visible');});
 $('rows').addEventListener('mouseleave',()=>{const hl=$('hl');if(hl)hl.setAttribute('visibility','hidden');});
