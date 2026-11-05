@@ -74,6 +74,11 @@ main{display:flex;flex-direction:column;gap:18px;min-width:0}
 .zoom{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
 .zoom select{width:auto}
 .planScroll{overflow-x:auto;border-radius:6px}
+.planWrap{position:relative}
+.tip{position:absolute;z-index:6;pointer-events:none;background:var(--ink);color:var(--panel);font-family:var(--f-num);font-size:13px;line-height:1.35;padding:6px 9px;border-radius:6px;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.tip b{font-family:var(--f-ui);font-size:15px}
+#plan g[data-r]{cursor:pointer}
+.s-st,.s-line,.s-t,.s-room,.s-hl,.s-dim,.s-dimc,.s-chalk{pointer-events:none}
 #plan{display:block;width:100%;min-width:960px;height:auto}
 .tscroll{overflow-x:auto;margin-top:10px}
 table{border-collapse:collapse;width:100%;font-size:14px}
@@ -83,7 +88,7 @@ td.n{font-family:var(--f-num);font-variant-numeric:tabular-nums;text-align:right
 th.n{text-align:right}
 td.lw{color:var(--chalk);font-weight:600}
 td.src{color:var(--muted)}
-tbody tr:hover{background:var(--hover)}
+tbody tr:hover,tbody tr.on{background:var(--hover)}
 .notes{font-size:13.5px;color:var(--muted);max-width:90ch}
 .notes li{margin:3px 0}
 /* SVG */
@@ -205,7 +210,7 @@ td .w3{color:var(--saw)}
           <label class="zoom" for="zoom">Zoom
             <select id="zoom"><option value="1">Fit</option><option value="1.5">150%</option><option value="2">200%</option><option value="3">300%</option></select></label>
         </div>
-        <div class="planScroll"><svg id="plan" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Floor plan with board layout"></svg></div>
+        <div class="planWrap"><div id="tip" class="tip" hidden></div><div class="planScroll"><svg id="plan" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Floor plan with board layout"></svg></div></div>
       </section>
 
       <section class="card">
@@ -460,7 +465,7 @@ function renderPlan(p,R){
   h+=`<g clip-path="url(#floorClip)">`;
   for(const r of R.rows){r.pieces.forEach((pc,j)=>{if(pc.hidden)return;
     const bx=pc.x0+3,by=r.y+3,bw2=Math.max(1,pc.x1-pc.x0-6),bh=Math.max(1,r.w-6),g=hsh(r.i+7,j+3)%GN;
-    h+=`<g><title>Row ${r.i+1}: ${mm(pc.len)} mm</title><rect x="${bx}" y="${by}" width="${bw2}" height="${bh}" fill="${tone(r.i,j)}"/>`+
+    h+=`<g data-r="${r.i}" data-j="${j}"><rect x="${bx}" y="${by}" width="${bw2}" height="${bh}" fill="${tone(r.i,j)}"/>`+
        `<rect x="${bx}" y="${by}" width="${bw2}" height="${bh}" fill="url(#g${g})" pointer-events="none"/>`+
        `<rect class="s-board" x="${bx}" y="${by}" width="${bw2}" height="${bh}" fill="none"/></g>`;});}
   for(const r of R.rows){const pc=r.pieces[0];if(r.s<R.L-.5)h+=`<line class="s-chalk" x1="${pc.x0+14}" y1="${r.y+6}" x2="${pc.x0+14}" y2="${r.y+r.w-6}"/>`;
@@ -511,7 +516,7 @@ function renderPlan(p,R){
     h+=`<text class="s-t s-c s-halo" x="${w1.x0/2}" y="${ly-50}" text-anchor="middle" font-size="130">${(w1.x0/1000).toFixed(2)} m to stair wall</text>`;
     const cx=(w1.x1+w2.x0)/2,cy=(w1.y0+w1.y1)/2;
     h+=`<text class="s-t s-halo" transform="translate(${cx} ${cy}) rotate(-90)" text-anchor="middle" font-size="115"><tspan x="0" dy="-70" font-weight="600">${p.stairFloored?'Stair walls':'Stair & hatch'}</tspan><tspan x="0" dy="150">${(p.stairInner).toFixed(2)} × ${(p.stairDepth).toFixed(2)} m</tspan></text>`;}
-  svg.innerHTML=h;
+  svg.innerHTML=h;HL=null;
   svg.style.width=(parseFloat($('zoom').value)*100)+'%';
 }
 
@@ -525,7 +530,28 @@ function renderTable(R){
     <td>${r.notch?`<span class="chip cut">${r.notch} piece${r.notch>1?'s':''}</span>`:''}</td></tr>`;}).join('');
 }
 
-let R=null;
+let R=null,HL=null;
+function pieceInfo(r,j){const pc=r.pieces[j],last=j===r.pieces.length-1;
+  const what=j===0?(r.s<R.L-.5?'Cut at left wall':'Full board, left wall'):(pc.kind==='end'?'Cut at right wall':'Full board');
+  const src=j===0?r.sSrc:(pc.kind==='end'?r.eSrc:'');
+  const same=Math.max(...r.ws)-Math.min(...r.ws)<=0.5;
+  const w=same?`${mm(r.ws[0])} mm wide`:`${w3(r.ws)} mm wide (L/M/R)`;
+  return `<b>Row ${r.i+1}</b> · board ${j+1} of ${r.pieces.length}<br>${mm(pc.len)} mm · ${what}${src?'<br>'+src:''}<br>${w}`;}
+function showTip(ev){const g=ev.target.closest&&ev.target.closest('g[data-r]');const tip=$('tip'),hl=$('hl');
+  if(!g||!R){tip.hidden=true;if(hl)hl.setAttribute('visibility','hidden');return;}
+  const r=R.rows[+g.dataset.r];tip.innerHTML=pieceInfo(r,+g.dataset.j);tip.hidden=false;
+  if(hl){hl.setAttribute('y',r.y);hl.setAttribute('height',r.w);hl.setAttribute('visibility','visible');}
+  const wrap=tip.parentElement.getBoundingClientRect(),tw=tip.offsetWidth,th=tip.offsetHeight;
+  let x=ev.clientX-wrap.left+14,y=ev.clientY-wrap.top-th-12;
+  if(x+tw>wrap.width)x=ev.clientX-wrap.left-tw-14;if(x<0)x=4;if(y<0)y=ev.clientY-wrap.top+18;
+  tip.style.left=x+'px';tip.style.top=y+'px';
+  document.querySelectorAll('#rows tr.on').forEach(t=>t.classList.remove('on'));
+  const tr=document.querySelector(`#rows tr[data-r="${r.i}"]`);if(tr)tr.classList.add('on');}
+function hideTip(){$('tip').hidden=true;const hl=$('hl');if(hl)hl.setAttribute('visibility','hidden');document.querySelectorAll('#rows tr.on').forEach(t=>t.classList.remove('on'));}
+$('plan').addEventListener('pointermove',e=>{if(e.pointerType==='mouse')showTip(e);});
+$('plan').addEventListener('pointerleave',e=>{if(e.pointerType==='mouse')hideTip();});
+$('plan').addEventListener('click',showTip);
+document.addEventListener('click',e=>{if(!e.target.closest('#plan'))hideTip();});
 function syncLine(p,R){const r2=p.lineAt!=='offset';if(locked){const eL=$('offL'),el=$('offR');if(r2)eL.value=Math.round(R.D[0]);if(p.lineDir!=='custom'||r2)el.value=Math.round(R.D[2]);return;}const el=$('offR'),eL=$('offL');eL.disabled=r2;if(r2)eL.value=Math.round(R.D[0]);el.disabled=p.lineDir!=='custom'||r2;if(el.disabled)el.value=Math.round(R.D[2]);}
 function update(){const p=read();R=compute(p);syncLine(p,R);p.offR=Math.round(R.D[2]);if(p.lineAt!=='offset')p.offL=Math.round(R.D[0]);save(p);renderCallouts(p,R);renderPlan(p,R);renderTable(R);}
 $('rows').addEventListener('mouseover',e=>{const tr=e.target.closest('tr');const hl=$('hl');if(!tr||!hl||!R)return;
