@@ -50,7 +50,13 @@ button{font:inherit;font-weight:600;font-size:14px;padding:8px 12px;border-radiu
 button:hover{background:var(--hover)}
 button:disabled{opacity:.45;cursor:default}
 .hbtns{display:flex;gap:8px;flex-wrap:wrap}
-#lock[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.lockbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:8px;background:var(--ink);color:var(--panel);font-weight:600}
+.lockbar button{background:var(--panel);color:var(--ink);border-color:var(--panel);font-size:15px;padding:9px 14px}
+.lockbar.open{background:var(--good)}
+.lockbar.nudge{animation:nudge .5s}
+@keyframes nudge{0%,100%{transform:none}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+aside.locked .f>input,aside.locked .f>select,aside.locked .chk>input{pointer-events:none}
+aside.locked fieldset{cursor:pointer}
 input:disabled,select:disabled{opacity:1;color:var(--ink);background:var(--panel);border-style:dashed}
 main{display:flex;flex-direction:column;gap:18px;min-width:0}
 .callouts{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
@@ -112,13 +118,14 @@ td .w3{color:var(--saw)}
     <div>
       <div class="eyebrow">Loft · laminate layout</div>
       <h1>Loft Floor Planner</h1>
-      <p class="sub">Boards run lengthways from the back-left corner. Change any measurement and the plan, cut lengths and order quantities update. Your measurements are locked in. Tap Locked to unlock and change them.</p>
+      <p class="sub">Boards run lengthways from the back-left corner. Change any measurement and the plan, cut lengths and order quantities update. Your measurements are locked in. Tap “Unlock to edit” to change them.</p>
     </div>
-    <div class="hbtns"><button id="lock" type="button" aria-pressed="true">Locked</button><button id="reset" type="button">Reset to my measurements</button></div>
+    <button id="reset" type="button">Reset to my measurements</button>
   </header>
 
   <div class="grid">
-    <aside>
+    <aside id="side">
+      <div class="lockbar" id="lockbar"><span id="lockmsg">🔒 Measurements locked</span><button id="lock" type="button" aria-pressed="true">Unlock to edit</button></div>
       <fieldset><legend>Room</legend>
         <div class="f"><label for="roomL">Length <small>(m, gable to gable)</small></label><input id="roomL" type="number" step="0.01" min="0.5"></div>
         <div class="f"><label for="gap">Expansion gap <small>(mm)</small></label><input id="gap" type="number" step="1" min="0"></div>
@@ -519,9 +526,14 @@ $('zoom').addEventListener('change',()=>{$('plan').style.width=(parseFloat($('zo
 $('reset').addEventListener('click',()=>{fill(DEF);update();});
 let locked=true;try{locked=localStorage.getItem(LKEY)!=='0';}catch(e){}
 function applyLock(){for(const k of F)$(k).disabled=locked;$('reset').disabled=locked;
-  const b=$('lock');b.setAttribute('aria-pressed',String(locked));b.textContent=locked?'Locked':'Unlocked, tap to lock';
+  $('side').classList.toggle('locked',locked);$('lockbar').classList.toggle('open',!locked);
+  $('lockmsg').textContent=locked?'🔒 Measurements locked':'✏️ Editing: changes save as you type';
+  const b=$('lock');b.setAttribute('aria-pressed',String(locked));b.textContent=locked?'Unlock to edit':'Lock';
   try{localStorage.setItem(LKEY,locked?'1':'0')}catch(e){}}
-$('lock').addEventListener('click',()=>{locked=!locked;applyLock();if(!locked)update();});
+$('lock').addEventListener('click',e=>{e.stopPropagation();locked=!locked;applyLock();if(!locked)update();});
+$('side').addEventListener('click',e=>{if(!locked||e.target.closest('#lockbar'))return;
+  const bar=$('lockbar');bar.classList.remove('nudge');void bar.offsetWidth;bar.classList.add('nudge');
+  bar.scrollIntoView({block:'nearest',behavior:'smooth'});});
 fill(load());update();applyLock();
 if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
 </script>
