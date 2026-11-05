@@ -48,6 +48,10 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--chalk)}
 .hint{font-size:12.5px;color:var(--muted);margin:6px 0 0}
 button{font:inherit;font-weight:600;font-size:14px;padding:8px 12px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
 button:hover{background:var(--hover)}
+button:disabled{opacity:.45;cursor:default}
+.hbtns{display:flex;gap:8px;flex-wrap:wrap}
+#lock[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+input:disabled,select:disabled{opacity:1;color:var(--ink);background:var(--panel);border-style:dashed}
 main{display:flex;flex-direction:column;gap:18px;min-width:0}
 .callouts{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
 .co{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:3px}
@@ -108,9 +112,9 @@ td .w3{color:var(--saw)}
     <div>
       <div class="eyebrow">Loft · laminate layout</div>
       <h1>Loft Floor Planner</h1>
-      <p class="sub">Boards run lengthways from the back-left corner. Change any measurement and the plan, cut lengths and order quantities update. Your numbers are kept on this device.</p>
+      <p class="sub">Boards run lengthways from the back-left corner. Change any measurement and the plan, cut lengths and order quantities update. Your measurements are locked in. Tap Locked to unlock and change them.</p>
     </div>
-    <button id="reset" type="button">Reset to defaults</button>
+    <div class="hbtns"><button id="lock" type="button" aria-pressed="true">Locked</button><button id="reset" type="button">Reset to my measurements</button></div>
   </header>
 
   <div class="grid">
@@ -188,7 +192,6 @@ td .w3{color:var(--saw)}
           <div class="legend">
             <span><i class="sw" style="background:#e2c9a0;border:1.5px solid #6c5539"></i>Light oak board</span>
             <span><i class="sw" style="background:var(--chalk)"></i>Cut at left wall</span>
-            <span><i class="sw" style="border:2px dashed var(--saw)"></i>Cut around stair wall</span>
             <span><i class="sw" style="background:var(--wall);border:1px solid var(--ink)"></i>Stair walls</span>
             <span><i class="sw" style="border-top:3px dashed var(--chalk);height:0"></i>Chalk line</span>
           </div>
@@ -224,11 +227,11 @@ td .w3{color:var(--saw)}
 
 <script>
 const F=['roomL','gap','wL','wM','wMidX','wR','lineAt','offL','lineDir','offR','offMid','boardL','boardW','perPack','kerf','mode','minPiece','minStagger','rip','minRow','stairOn','stairSide','stairX','stairT','stairInner','stairDepth','stairFloored','spare','rollM2'];
-const DEF={roomL:11.8,gap:10,wL:4.4,wM:4.4,wMidX:5.9,wR:4.4,lineAt:'row2',offL:1000,lineDir:'split',offR:1000,offMid:null,
+const DEF={roomL:11.8,gap:10,wL:4.275,wM:4.339,wMidX:5.9,wR:4.311,lineAt:'row2',offL:1000,lineDir:'split',offR:1000,offMid:null,
   boardL:1286,boardW:192,perPack:8,kerf:3,mode:'offcut',minPiece:300,minStagger:300,rip:'auto',minRow:60,
-  stairOn:true,stairSide:'front',stairX:7.87,stairT:100,stairInner:0.9,stairDepth:2.2,stairFloored:false,spare:5,rollM2:15};
+  stairOn:true,stairSide:'front',stairX:3.722,stairT:80,stairInner:0.821,stairDepth:2.294,stairFloored:true,spare:5,rollM2:15};
 const NULLABLE=new Set(['offMid']);
-const KEY='loft-floor-planner-v1';
+const KEY='loft-floor-planner-v2',LKEY='loft-floor-planner-lock';
 const $=id=>document.getElementById(id);
 
 function load(){let s={};try{s=JSON.parse(localStorage.getItem(KEY)||'{}')||{}}catch(e){}
@@ -410,7 +413,7 @@ function renderCallouts(p,R){
     {k:'Floor area',chip:['info','Underlay'],v:`${m2(R.area)} m²`,d:`${R.rolls} roll${R.rolls>1?'s':''} of underlay at ${p.rollM2} m² per roll. ${R.rows.length} rows in total.`},
   ];
   if(p.stairOn)cards.push({k:'Around stair walls',chip:R.notchBoards?['cut','Notch cuts']:['ok','None'],v:`${R.notchBoards} piece${R.notchBoards===1?'':'s'}`,
-     d:'Pieces that run into a stair wall or the hatch opening and need shaping. Shown with an orange dashed outline.'});
+     d:'Pieces that run into a stair wall or the hatch opening and need shaping. Listed row by row in the cut list.'});
   $('callouts').innerHTML=cards.map(c=>`<div class="co"><div class="k">${c.k}<span class="chip ${c.chip[0]}">${c.chip[1]}</span></div><div class="v">${c.v}</div><div class="d">${c.d}</div></div>`).join('');
 }
 
@@ -444,7 +447,7 @@ function renderPlan(p,R){
        `<rect x="${bx}" y="${by}" width="${bw2}" height="${bh}" fill="url(#g${g})" pointer-events="none"/>`+
        `<rect class="s-board" x="${bx}" y="${by}" width="${bw2}" height="${bh}" fill="none"/></g>`;});}
   for(const r of R.rows){const pc=r.pieces[0];if(r.s<R.L-.5)h+=`<line class="s-chalk" x1="${pc.x0+14}" y1="${r.y+6}" x2="${pc.x0+14}" y2="${r.y+r.w-6}"/>`;
-    for(const q of r.pieces)if(q.notch&&!q.hidden)h+=`<rect class="s-notch" x="${q.x0+10}" y="${r.y+10}" width="${q.x1-q.x0-20}" height="${r.w-20}"/>`;}
+}
   h+=`</g>`;
   for(const e of R.ex)h+=e.kind==='wall'?`<rect class="s-wall" x="${e.x0}" y="${e.y0}" width="${e.x1-e.x0}" height="${e.y1-e.y0}"/>`
     :`<rect class="s-hbg" x="${e.x0}" y="${e.y0}" width="${e.x1-e.x0}" height="${e.y1-e.y0}"/><path class="s-hln" d="M${e.x0+20} ${e.y0+20}H${e.x1-20}V${e.y1-20}H${e.x0+20}Z M${e.x0+20} ${e.y0+20}L${e.x1-20} ${e.y1-20} M${e.x1-20} ${e.y0+20}L${e.x0+20} ${e.y1-20}"/>`;
@@ -506,7 +509,7 @@ function renderTable(R){
 }
 
 let R=null;
-function syncLine(p,R){const r2=p.lineAt==='row2',el=$('offR'),eL=$('offL');eL.disabled=r2;if(r2)eL.value=Math.round(R.D[0]);el.disabled=p.lineDir!=='custom'||r2;if(el.disabled)el.value=Math.round(R.D[2]);}
+function syncLine(p,R){if(locked){const eL=$('offL'),el=$('offR');if(p.lineAt==='row2')eL.value=Math.round(R.D[0]);if(p.lineDir!=='custom'||p.lineAt==='row2')el.value=Math.round(R.D[2]);return;}const r2=p.lineAt==='row2',el=$('offR'),eL=$('offL');eL.disabled=r2;if(r2)eL.value=Math.round(R.D[0]);el.disabled=p.lineDir!=='custom'||r2;if(el.disabled)el.value=Math.round(R.D[2]);}
 function update(){const p=read();R=compute(p);syncLine(p,R);p.offR=Math.round(R.D[2]);if(p.lineAt==='row2')p.offL=Math.round(R.D[0]);save(p);renderCallouts(p,R);renderPlan(p,R);renderTable(R);}
 $('rows').addEventListener('mouseover',e=>{const tr=e.target.closest('tr');const hl=$('hl');if(!tr||!hl||!R)return;
   const r=R.rows[+tr.dataset.r];hl.setAttribute('y',r.y);hl.setAttribute('height',r.w);hl.setAttribute('visibility','visible');});
@@ -514,7 +517,12 @@ $('rows').addEventListener('mouseleave',()=>{const hl=$('hl');if(hl)hl.setAttrib
 for(const k of F){$(k).addEventListener('input',update);$(k).addEventListener('change',update);}
 $('zoom').addEventListener('change',()=>{$('plan').style.width=(parseFloat($('zoom').value)*100)+'%';});
 $('reset').addEventListener('click',()=>{fill(DEF);update();});
-fill(load());update();
+let locked=true;try{locked=localStorage.getItem(LKEY)!=='0';}catch(e){}
+function applyLock(){for(const k of F)$(k).disabled=locked;$('reset').disabled=locked;
+  const b=$('lock');b.setAttribute('aria-pressed',String(locked));b.textContent=locked?'Locked':'Unlocked, tap to lock';
+  try{localStorage.setItem(LKEY,locked?'1':'0')}catch(e){}}
+$('lock').addEventListener('click',()=>{locked=!locked;applyLock();if(!locked)update();});
+fill(load());update();applyLock();
 if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
 </script>
 
