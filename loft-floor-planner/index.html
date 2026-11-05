@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Loft Floor">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f0eeeb">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Loft Floor Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: control rail on the left, plan + cut list on the right; stacks on phones */
+:root{
+  --bg:#f0eeeb; --panel:#fbfaf8; --ink:#25221f; --muted:#6e6760; --line:#dcd4cc; --hover:#ebe6df;
+  --chalk:#2361c4; --saw:#cf5d1a; --good:#2f7d4b;
+  --wall:#d8b2a3; --sub:#cbbb9b; --hatch:#a0948b;
+  --f-ui:"Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-num:"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#1a1918; --panel:#232120; --ink:#ece7e1; --muted:#a39a91; --line:#3a3532; --hover:#2d2a28;
+  --chalk:#7aa8ff; --saw:#ff8c4a; --good:#5fbf7f;
+  --wall:#8a6a5f; --sub:#4b4336; --hatch:#6e655e; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#1a1918; --panel:#232120; --ink:#ece7e1; --muted:#a39a91; --line:#3a3532; --hover:#2d2a28;
+  --chalk:#7aa8ff; --saw:#ff8c4a; --good:#5fbf7f;
+  --wall:#8a6a5f; --sub:#4b4336; --hatch:#6e655e; color-scheme:dark}
+
+body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:15px;line-height:1.4}
+.wrap{max-width:1560px;margin:0 auto;padding-block:20px 48px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:18px}
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--chalk)}
+h1{font-size:32px;font-weight:700;margin:2px 0 4px;letter-spacing:.005em;text-wrap:balance}
+.sub{margin:0;color:var(--muted);max-width:62ch}
+h2{font-size:18px;font-weight:700;margin:0}
+.grid{display:grid;gap:20px;grid-template-columns:1fr}
+@media (min-width:980px){.grid{grid-template-columns:292px minmax(0,1fr)}}
+aside{display:flex;flex-direction:column;gap:12px}
+fieldset{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:10px 14px 12px;margin:0;min-width:0}
+legend{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:0 6px}
+.f{display:grid;grid-template-columns:minmax(0,1fr) 112px;align-items:center;gap:8px;margin:7px 0}
+.f label{font-size:14px}
+.f label small{color:var(--muted)}
+.chk{display:flex;align-items:center;gap:8px;margin:8px 0;font-size:14px}
+input[type=number],select{width:100%;box-sizing:border-box;font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+input[type=number]{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--chalk);outline-offset:1px}
+input[type=checkbox]{width:16px;height:16px;accent-color:var(--chalk)}
+.hint{font-size:12.5px;color:var(--muted);margin:6px 0 0}
+button{font:inherit;font-weight:600;font-size:14px;padding:8px 12px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+button:hover{background:var(--hover)}
+main{display:flex;flex-direction:column;gap:18px;min-width:0}
+.callouts{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
+.co{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:3px}
+.co .k{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);display:flex;justify-content:space-between;gap:6px;align-items:center}
+.co .v{font-family:var(--f-num);font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+.co .d{font-size:13px;color:var(--muted)}
+.chip{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:none;padding:1px 7px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+.chip.cut{color:var(--saw)} .chip.ok{color:var(--good)} .chip.info{color:var(--chalk)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;min-width:0}
+.bar{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between;margin-bottom:10px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:18px;height:12px;border-radius:2px;display:inline-block}
+.zoom{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
+.zoom select{width:auto}
+.planScroll{overflow-x:auto;border-radius:6px}
+#plan{display:block;width:100%;min-width:960px;height:auto}
+.tscroll{overflow-x:auto;margin-top:10px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{text-align:left;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);padding:8px;white-space:nowrap}
+td{padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td.n{font-family:var(--f-num);font-variant-numeric:tabular-nums;text-align:right}
+th.n{text-align:right}
+td.lw{color:var(--chalk);font-weight:600}
+td.src{color:var(--muted)}
+tbody tr:hover{background:var(--hover)}
+.notes{font-size:13.5px;color:var(--muted);max-width:90ch}
+.notes li{margin:3px 0}
+/* SVG */
+.s-sub{fill:var(--sub)}
+.s-room{fill:none;stroke:var(--ink);stroke-width:40}
+.s-board{stroke:#9f8155;stroke-width:4}
+.s-chalk{stroke:var(--chalk);stroke-width:28}
+.s-notch{fill:none;stroke:var(--saw);stroke-width:16;stroke-dasharray:60 34}
+.s-wall{fill:var(--wall);stroke:var(--ink);stroke-width:10}
+.s-hbg{fill:var(--panel)}
+.s-hln{stroke:var(--hatch);stroke-width:14}
+.s-t{fill:var(--ink);font-family:var(--f-num)}
+.s-ui{font-family:var(--f-ui);font-weight:700;letter-spacing:.08em}
+.s-m{fill:var(--muted)}
+.s-c{fill:var(--chalk);font-weight:600}
+.s-dim{stroke:var(--muted);stroke-width:8;fill:none}
+.s-dimc{stroke:var(--chalk);stroke-width:10;stroke-dasharray:40 26;fill:none}
+.s-halo{paint-order:stroke;stroke:var(--panel);stroke-width:36;stroke-linejoin:round}
+.s-hl{fill:none;stroke:var(--chalk);stroke-width:22}
+.s-line{stroke:var(--chalk);stroke-width:18;stroke-dasharray:90 40}
+.s-st{stroke:var(--muted);stroke-width:8;stroke-dasharray:30 30;fill:none}
+td .w3{color:var(--saw)}
+.warn{color:var(--saw)}
+.s-grain{stroke:#8a6b40;stroke-opacity:.13;stroke-width:3}
+@media (prefers-reduced-motion:no-preference){.s-hl{transition:y .12s}}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Loft · laminate layout</div>
+      <h1>Loft Floor Planner</h1>
+      <p class="sub">Boards run lengthways from the back-left corner. Change any measurement and the plan, cut lengths and order quantities update. Your numbers are kept on this device.</p>
+    </div>
+    <button id="reset" type="button">Reset to defaults</button>
+  </header>
+
+  <div class="grid">
+    <aside>
+      <fieldset><legend>Room</legend>
+        <div class="f"><label for="roomL">Length <small>(m, gable to gable)</small></label><input id="roomL" type="number" step="0.01" min="0.5"></div>
+        <div class="f"><label for="gap">Expansion gap <small>(mm)</small></label><input id="gap" type="number" step="1" min="0"></div>
+      </fieldset>
+
+      <fieldset><legend>Widths, back → front</legend>
+        <div class="f"><label for="wL">At left gable <small>(m)</small></label><input id="wL" type="number" step="0.001" min="0.5"></div>
+        <div class="f"><label for="wM">In the middle <small>(m)</small></label><input id="wM" type="number" step="0.001" min="0.5"></div>
+        <div class="f"><label for="wMidX">Middle taken at <small>(m from left)</small></label><input id="wMidX" type="number" step="0.01" min="0.1"></div>
+        <div class="f"><label for="wR">At right gable <small>(m)</small></label><input id="wR" type="number" step="0.001" min="0.5"></div>
+        <p class="hint">The gable walls are treated as straight. The back and front stud walls follow these three measurements.</p>
+      </fieldset>
+
+      <fieldset><legend>Chalk line</legend>
+        <div class="f"><label for="offL">From front-left corner <small>(mm)</small></label><input id="offL" type="number" step="1" min="0"></div>
+        <div class="f"><label for="lineDir">Line runs</label>
+          <select id="lineDir"><option value="split">Split the difference</option><option value="front">Parallel to front wall</option><option value="back">Parallel to back wall</option><option value="custom">Custom right end</option></select></div>
+        <div class="f"><label for="offR">From front-right corner <small>(mm)</small></label><input id="offR" type="number" step="1" min="0"></div>
+        <div class="f"><label for="offMid">Front wall to line, middle <small>(mm)</small></label><input id="offMid" type="number" step="1" min="0" placeholder="straight"></div>
+        <p class="hint">Measured square off the front wall. The boards run parallel to the line. Leave the middle box empty to treat the front wall as straight. Fill it in once the line is struck and the plan shows where the bow is.</p>
+      </fieldset>
+
+      <fieldset><legend>Boards</legend>
+        <div class="f"><label for="boardL">Board length <small>(mm)</small></label><input id="boardL" type="number" step="1" min="200"></div>
+        <div class="f"><label for="boardW">Covering width <small>(mm)</small></label><input id="boardW" type="number" step="1" min="50"></div>
+        <div class="f"><label for="perPack">Boards per pack</label><input id="perPack" type="number" step="1" min="1"></div>
+        <div class="f"><label for="kerf">Saw blade kerf <small>(mm)</small></label><input id="kerf" type="number" step="0.5" min="0"></div>
+        <p class="hint">Covering width is the visible face once clicked together, not including the tongue. Check the pack label.</p>
+      </fieldset>
+
+      <fieldset><legend>Stagger</legend>
+        <div class="f"><label for="mode">Method</label>
+          <select id="mode"><option value="offcut">Use offcuts</option><option value="pattern">Full / ⅔ / ⅓</option></select></div>
+        <div class="f"><label for="minPiece">Shortest piece <small>(mm)</small></label><input id="minPiece" type="number" step="10" min="50"></div>
+        <div class="f"><label for="minStagger">Min joint offset <small>(mm)</small></label><input id="minStagger" type="number" step="10" min="0"></div>
+        <p class="hint">"Use offcuts" starts each row with the piece cut off the end of the row before, so less goes in the skip. A new cut is only made when that piece would break the rules.</p>
+      </fieldset>
+
+      <fieldset><legend>First &amp; last row</legend>
+        <div class="f"><label for="rip">Rip first row</label>
+          <select id="rip"><option value="auto">Only if needed</option><option value="always">Always balance</option><option value="never">Never</option></select></div>
+        <div class="f"><label for="minRow">Narrowest last row <small>(mm)</small></label><input id="minRow" type="number" step="5" min="10"></div>
+      </fieldset>
+
+      <fieldset><legend>Stair &amp; hatch walls</legend>
+        <label class="chk"><input id="stairOn" type="checkbox"> Show stair walls</label>
+        <div class="f"><label for="stairSide">Walls come off</label>
+          <select id="stairSide"><option value="front">Front wall</option><option value="back">Back wall</option></select></div>
+        <div class="f"><label for="stairX">Left wall → first stair wall <small>(m)</small></label><input id="stairX" type="number" step="0.01" min="0"></div>
+        <div class="f"><label for="stairT">Wall thickness <small>(mm)</small></label><input id="stairT" type="number" step="5" min="10"></div>
+        <div class="f"><label for="stairInner">Gap between walls <small>(m)</small></label><input id="stairInner" type="number" step="0.01" min="0.1"></div>
+        <div class="f"><label for="stairDepth">Wall length into room <small>(m)</small></label><input id="stairDepth" type="number" step="0.01" min="0.1"></div>
+        <label class="chk"><input id="stairFloored" type="checkbox"> Lay laminate between the walls</label>
+        <p class="hint">Rough positions to start with. Put your tape measurements in here and the plan redraws.</p>
+      </fieldset>
+
+      <fieldset><legend>Ordering</legend>
+        <div class="f"><label for="spare">Spare boards <small>(%)</small></label><input id="spare" type="number" step="1" min="0"></div>
+        <div class="f"><label for="rollM2">Underlay per roll <small>(m²)</small></label><input id="rollM2" type="number" step="0.5" min="1"></div>
+      </fieldset>
+    </aside>
+
+    <main>
+      <section class="callouts" id="callouts" aria-live="polite"></section>
+
+      <section class="card">
+        <div class="bar">
+          <h2>Floor plan</h2>
+          <div class="legend">
+            <span><i class="sw" style="background:#dcc39b;border:1px solid #9f8155"></i>Light oak board</span>
+            <span><i class="sw" style="background:var(--chalk)"></i>Cut at left wall</span>
+            <span><i class="sw" style="border:2px dashed var(--saw)"></i>Cut around stair wall</span>
+            <span><i class="sw" style="background:var(--wall);border:1px solid var(--ink)"></i>Stair walls</span>
+            <span><i class="sw" style="border-top:3px dashed var(--chalk);height:0"></i>Chalk line</span>
+          </div>
+          <label class="zoom" for="zoom">Zoom
+            <select id="zoom"><option value="1">Fit</option><option value="1.5">150%</option><option value="2">200%</option><option value="3">300%</option></select></label>
+        </div>
+        <div class="planScroll"><svg id="plan" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Floor plan with board layout"></svg></div>
+      </section>
+
+      <section class="card">
+        <h2>Row by row cut list</h2>
+        <p class="hint">Row 1 is against the back wall. Hover a row to find it on the plan. Lengths are face length in mm.</p>
+        <div class="tscroll">
+          <table>
+            <thead><tr>
+              <th>Row</th><th class="n">Width L / M / R</th><th class="n">Left wall piece</th><th>Comes from</th>
+              <th class="n">Full boards</th><th class="n">Right wall piece</th><th>Comes from</th><th>Stair cut</th>
+            </tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <ul class="notes">
+        <li>The default board size (1286 × 192 mm, 8 per pack) is a placeholder. Enter the sizes printed on your B&amp;Q pack.</li>
+        <li>Lengths allow for the expansion gap at every wall and a saw kerf on each cut. Measure the actual row before cutting.</li>
+        <li>An offcut from the right-hand end keeps its click profile on the correct end to start the next row at the left wall, which is why offcuts move from right to left.</li>
+        <li>Board count around the stair walls assumes boards run straight through, so it errs slightly on the high side.</li>
+      </ul>
+    </main>
+  </div>
+</div>
+
+<script>
+const F=['roomL','gap','wL','wM','wMidX','wR','offL','lineDir','offR','offMid','boardL','boardW','perPack','kerf','mode','minPiece','minStagger','rip','minRow','stairOn','stairSide','stairX','stairT','stairInner','stairDepth','stairFloored','spare','rollM2'];
+const DEF={roomL:11.8,gap:10,wL:4.4,wM:4.4,wMidX:5.9,wR:4.4,offL:1000,lineDir:'split',offR:1000,offMid:null,
+  boardL:1286,boardW:192,perPack:8,kerf:3,mode:'offcut',minPiece:300,minStagger:300,rip:'auto',minRow:60,
+  stairOn:true,stairSide:'front',stairX:7.87,stairT:100,stairInner:0.9,stairDepth:2.2,stairFloored:false,spare:5,rollM2:15};
+const NULLABLE=new Set(['offMid']);
+const KEY='loft-floor-planner-v1';
+const $=id=>document.getElementById(id);
+
+function load(){let s={};try{s=JSON.parse(localStorage.getItem(KEY)||'{}')||{}}catch(e){}
+  if(s.roomW!=null&&s.wL==null){s.wL=s.wM=s.wR=s.roomW;}
+  return {...DEF,...s};}
+function save(p){try{localStorage.setItem(KEY,JSON.stringify(p))}catch(e){}}
+function fill(p){for(const k of F){const el=$(k);if(el.type==='checkbox')el.checked=!!p[k];else el.value=p[k]==null?'':p[k];}}
+function read(){const p={};for(const k of F){const el=$(k);
+  if(el.type==='checkbox')p[k]=el.checked;else if(el.tagName==='SELECT')p[k]=el.value;
+  else if(NULLABLE.has(k)&&el.value.trim()==='')p[k]=null;
+  else{const v=parseFloat(el.value);p[k]=isFinite(v)?v:DEF[k];}}
+  p.roomL=Math.max(.5,p.roomL);for(const k of ['wL','wM','wR'])p[k]=Math.max(.3,p[k]);
+  p.wMidX=Math.min(Math.max(.05,p.wMidX),p.roomL-.05);
+  p.boardL=Math.max(200,p.boardL);p.boardW=Math.max(50,p.boardW);
+  p.gap=Math.max(0,p.gap);p.kerf=Math.max(0,p.kerf);p.perPack=Math.max(1,Math.round(p.perPack));
+  p.minPiece=Math.max(50,Math.min(p.minPiece,p.boardL));p.minStagger=Math.max(0,Math.min(p.minStagger,p.boardL/2));
+  p.minRow=Math.max(10,p.minRow);p.rollM2=Math.max(1,p.rollM2);p.spare=Math.max(0,p.spare);
+  return p;}
+
+function compute(p){
+  const L=p.boardL,bw=p.boardW,gap=p.gap,kerf=p.kerf,minP=p.minPiece;
+  const RL=p.roomL*1000,UL=RL-2*gap,xm=p.wMidX*1000;
+  const XS=[0,xm,RL],W=[p.wL,p.wM,p.wR].map(v=>v*1000);
+
+  // chalk line: distance from front wall at each station (line is the straight datum, y = Yline)
+  const dL=p.offL;let dR;
+  if(p.lineDir==='front')dR=dL;
+  else if(p.lineDir==='back')dR=W[2]-(W[0]-dL);
+  else if(p.lineDir==='custom')dR=p.offR;
+  else dR=dL+(W[2]-W[0])/2;
+  const dM=p.offMid==null?dL+(dR-dL)*xm/RL:p.offMid;
+  const D=[dL,dM,dR];
+  let yF=D.slice(),yB=D.map((d,i)=>d-W[i]);
+  const sh=-Math.min(...yB);yF=yF.map(v=>v+sh);yB=yB.map(v=>v+sh);const Yline=sh;
+  const backDist=W.map((w,i)=>w-D[i]);
+  const interp=(a,x)=>x<=xm?a[0]+(a[1]-a[0])*x/xm:a[1]+(a[2]-a[1])*(x-xm)/(RL-xm);
+  const RW=Math.max(...yF);
+
+  // rows across the room, parallel to the line
+  const Ybmin=Math.min(...yB)+gap,Ybmax=Math.max(...yB)+gap,Yfmin=Math.min(...yF)-gap,Yfmax=Math.max(...yF)-gap;
+  let bounds=[],balanced=false;
+  if(Yfmax-Ybmin>bw+1e-6){
+    const nat=()=>{const b1=Ybmin+bw;const k=Math.max(0,Math.ceil((Yfmax-b1)/bw-1e-6)-1);return{b1,k};};
+    const bal=()=>{const S=Yfmin-Ybmax;const k=Math.max(0,Math.floor((S-2*p.minRow)/bw));return{b1:Ybmax+(S-k*bw)/2,k};};
+    let c=nat();const lastNarrow=Yfmin-(c.b1+c.k*bw);
+    if(p.rip==='always'||(p.rip==='auto'&&lastNarrow<p.minRow)){c=bal();balanced=true;}
+    for(let j=0;j<=c.k;j++)bounds.push(c.b1+j*bw);
+  }
+  const n=bounds.length+1;
+  const rowDefs=[];
+  for(let i=0;i<n;i++){
+    const top=i===0?null:bounds[i-1],bot=i===n-1?null:bounds[i];
+    const ws=[0,1,2].map(s=>(bot??yF[s]-gap)-(top??yB[s]+gap));
+    const y0=top??Math.min(...yB),y1=bot??RW;
+    const cy=((top??Ybmin)+(bot??Yfmax))/2;
+    rowDefs.push({ws,y0,y1,cy,scribe:top==null||bot==null});
+  }
+
+  const endOf=s=>{s=Math.min(s,UL);const r=UL-s;const nf=Math.floor(r/L+1e-9);let e=r-nf*L;if(e<1)e=0;return{s,full:nf,e};};
+  const okLen=s=>{const o=endOf(s);return s>=Math.min(minP,UL)-1e-6&&s<=L+1e-6&&(o.e===0||o.e>=minP-1e-6);};
+  const dist=(a,b)=>{const d=((a-b)%L+L)%L;return Math.min(d,L-d);};
+
+  const rows=[],rPool=[],lPool=[];let newBoards=0,carry=null;
+  for(let i=0;i<n;i++){
+    const prev=i>0?rows[i-1].s:null,prev2=i>1?rows[i-2].s:null;
+    const valid=(s,strict=true)=>okLen(s)&&(prev==null||dist(s,prev)>=p.minStagger-1e-6)&&(!strict||prev2==null||dist(s,prev2)>=100);
+    const score=s=>(prev==null?L:Math.min(dist(s,prev),L/2))+(prev2==null?0:.4*Math.min(dist(s,prev2),L/2));
+    const nearest=t=>{
+      for(const strict of [true,false])for(let d=0;d<=L;d+=5)for(const c of [t-d,t+d])if(c>=minP&&c<=L&&valid(c,strict))return Math.round(c);
+      let best=null,bs=-1;for(let c=L;c>=minP;c-=5)if(okLen(c)&&score(c)>bs){bs=score(c);best=c;}
+      return best??Math.min(L,UL);};
+    let s,item=null;
+    if(i===0)s=nearest(L);
+    else if(p.mode==='offcut'){
+      if(carry&&rPool.includes(carry)&&valid(carry.len)){item=carry;s=carry.len;}
+      else{const c=rPool.filter(it=>valid(it.len)).sort((a,b)=>score(b.len)-score(a.len));
+        if(c.length){item=c[0];s=item.len;}
+        else if(valid(L))s=L;
+        else{let best=null,bs=-1;for(let c2=L-5;c2>=minP;c2-=5)if(valid(c2)&&score(c2)>bs){bs=score(c2);best=c2;}s=best??nearest(L);}}
+    }else s=nearest(Math.round(L*[1,2/3,1/3][i%3]));
+
+    const o=endOf(s);s=o.s;let sSrc;
+    if(item){rPool.splice(rPool.indexOf(item),1);sSrc=`Offcut from row ${item.from+1}`;}
+    else if(s>=L-.5){newBoards++;sSrc='Full board, no cut';}
+    else{const fit=rPool.filter(it=>it.len>=s).sort((a,b)=>a.len-b.len)[0];
+      if(fit){rPool.splice(rPool.indexOf(fit),1);sSrc=`Trim offcut from row ${fit.from+1}`;}
+      else{newBoards++;const r=Math.round(L-s-kerf);if(r>=minP)lPool.push({len:r,from:i});sSrc='Cut from new board';}}
+    newBoards+=o.full;
+    let eSrc='',carryNew=null;
+    if(o.e>0){const e=Math.round(o.e);const fit=lPool.filter(it=>it.len>=e).sort((a,b)=>a.len-b.len)[0];
+      if(fit){lPool.splice(lPool.indexOf(fit),1);eSrc=`Offcut from row ${fit.from+1}`;}
+      else{newBoards++;const r=Math.round(L-e-kerf);if(r>=minP){carryNew={len:r,from:i};rPool.push(carryNew);}eSrc='Cut from new board';}}
+    carry=carryNew;
+    const pieces=[];let x=gap;pieces.push({x0:x,x1:x+s,kind:'start',len:s});x+=s;
+    for(let k=0;k<o.full;k++){pieces.push({x0:x,x1:x+L,kind:'full',len:L});x+=L;}
+    if(o.e>0)pieces.push({x0:x,x1:x+o.e,kind:'end',len:o.e});
+    const rd=rowDefs[i];
+    rows.push({i,y:rd.y0,w:rd.y1-rd.y0,cy:rd.cy,ws:rd.ws,scribe:rd.scribe,s,full:o.full,e:o.e,sSrc,eSrc,pieces,notch:0});
+  }
+
+  // stair walls, hung off the chosen wall
+  const ex=[];
+  if(p.stairOn){const t=p.stairT,x0=p.stairX*1000,inner=p.stairInner*1000,Dp=p.stairDepth*1000;
+    const xc=Math.min(Math.max(x0+t+inner/2,0),RL);
+    const y0=p.stairSide==='front'?interp(yF,xc)-Dp:interp(yB,xc),y1=y0+Dp;
+    ex.push({x0,x1:x0+t,y0,y1,kind:'wall'},{x0:x0+t+inner,x1:x0+2*t+inner,y0,y1,kind:'wall'});
+    if(!p.stairFloored)ex.push({x0:x0+t,x1:x0+t+inner,y0,y1,kind:'hatch'});}
+  let notchBoards=0,exArea=0;
+  for(const e of ex)exArea+=Math.max(0,Math.min(e.x1,RL)-Math.max(e.x0,0))*Math.max(0,e.y1-e.y0);
+  for(const r of rows)for(const pc of r.pieces){pc.notch=false;pc.hidden=false;
+    for(const e of ex){const ax0=e.x0-gap,ax1=e.x1+gap,ay0=e.y0-gap,ay1=e.y1+gap;
+      const ix=pc.x1>ax0&&pc.x0<ax1,iy=r.y+r.w>ay0&&r.y<ay1;
+      if(ix&&iy){const inside=pc.x0>=ax0&&pc.x1<=ax1&&r.y>=ay0&&r.y+r.w<=ay1;if(inside)pc.hidden=true;else pc.notch=true;}}
+    if(pc.notch&&!pc.hidden){r.notch++;notchBoards++;}}
+
+  // area by shoelace
+  const poly=[[0,yB[0]],[xm,yB[1]],[RL,yB[2]],[RL,yF[2]],[xm,yF[1]],[0,yF[0]]];
+  let a2=0;for(let i=0;i<poly.length;i++){const [x1,y1]=poly[i],[x2,y2]=poly[(i+1)%poly.length];a2+=x1*y2-x2*y1;}
+  const area=(Math.abs(a2)/2-exArea)/1e6;
+  const withSpare=Math.ceil(newBoards*(1+p.spare/100));
+
+  // nearest board joint to the chalk line
+  let joint=null;bounds.forEach((b,j)=>{const d=Yline-b;if(!joint||Math.abs(d)<Math.abs(joint.d))joint={d,after:j+1};});
+
+  const usedArea=rows.reduce((t,r)=>t+r.w,0)*UL;
+  return{L,bw,gap,RL,RW,UL,XS,W,D,yF,yB,Yline,backDist,poly,rows,bounds,balanced,ex,newBoards,withSpare,
+    packs:Math.ceil(withSpare/p.perPack),packM2:p.perPack*L*bw/1e6,area,rolls:Math.ceil(area/p.rollM2),notchBoards,
+    waste:Math.max(0,1-(area*1e6)/(newBoards*L*bw)),joint,
+    backVar:Ybmax-Ybmin,frontVar:Yfmax-Yfmin};
+}
+
+const OAK=['#dcc39b','#e4cda7','#d5b98d','#e0c79f','#d2b388','#e7d3b0','#d9bd92'];
+const tone=(i,j)=>OAK[(i*5+j*3+((i*j)%4))%OAK.length];
+const mm=v=>Math.round(v).toLocaleString('en-GB');
+const m2=v=>v.toFixed(2);
+const w3=ws=>ws.map(mm).join(' / ');
+const rowState=(ws,bw)=>{const mx=Math.max(...ws),mn=Math.min(...ws);
+  if(mn<=0)return['cut','Check row'];if(mx>bw+.5)return['cut','Too wide'];
+  if(mx-mn>2)return['cut','Scribe to wall'];if(mx<bw-.5)return['cut','Rip lengthways'];return['ok','Full width'];};
+
+function renderCallouts(p,R){
+  const r0=R.rows[0],last=R.rows[R.rows.length-1];
+  const firstCut=r0.s<R.L-.5;
+  const rowNote=(ws,wall)=>{const mx=Math.max(...ws),mn=Math.min(...ws);
+    if(mn<=0)return `The ${wall} wall comes in so far this row runs out. Move the chalk line or set "Rip first row" to balance.`;
+    if(mx>R.bw+.5)return `The ${wall} wall is out by more than a board width, so this row needs a second strip.`;
+    if(mx-mn>2)return `Scribe to the ${wall} wall: it tapers ${mm(mx-mn)} mm along the room. Left / middle / right shown.`;
+    return mn<p.minRow?'Narrower than your limit. Set "Rip first row" to balance it.':`Same width the full length.`;};
+  const j=R.joint;
+  const cards=[
+    {k:'First board, back-left',chip:firstCut?['cut','Cut needed']:['ok','No cut'],
+     v:firstCut?`Cut to ${mm(r0.s)} mm`:`Full ${mm(R.L)} mm`,
+     d:firstCut?`A full board would leave a ${mm((R.UL-R.L)%R.L)} mm scrap at the right wall. Cutting it keeps the end piece at ${mm(r0.e)} mm.`:`Row 1 finishes with a ${r0.e?mm(r0.e)+' mm':'perfect'} piece at the right wall.`},
+    {k:'Chalk line',chip:['info',{split:'Split',front:'∥ front',back:'∥ back',custom:'Custom'}[p.lineDir]],
+     v:`${mm(R.D[0])} / ${mm(R.D[2])} mm`,
+     d:`From the front wall at the left and right gables. Back wall to the line is ${mm(R.backDist[0])} mm at the left and ${mm(R.backDist[2])} mm at the right.`+
+       (j?` The nearest board joint (after row ${j.after}) sits ${mm(Math.abs(j.d))} mm ${j.d>=0?'behind':'in front of'} the line.`:'')},
+    {k:'Row 1, back wall',chip:rowState(r0.ws,R.bw),v:w3(r0.ws),d:rowNote(r0.ws,'back')},
+    {k:`Row ${R.rows.length}, front wall`,chip:rowState(last.ws,R.bw),v:w3(last.ws),d:rowNote(last.ws,'front')},
+    {k:'Boards to buy',chip:['info',`+${p.spare}% spare`],v:`${R.withSpare} boards`,
+     d:`${R.packs} packs of ${p.perPack} (${m2(R.packM2)} m² each). ${R.newBoards} boards actually cut into, ~${Math.round(R.waste*100)}% waste.`},
+    {k:'Floor area',chip:['info','Underlay'],v:`${m2(R.area)} m²`,d:`${R.rolls} roll${R.rolls>1?'s':''} of underlay at ${p.rollM2} m² per roll. ${R.rows.length} rows in total.`},
+  ];
+  if(p.stairOn)cards.push({k:'Around stair walls',chip:R.notchBoards?['cut','Notch cuts']:['ok','None'],v:`${R.notchBoards} piece${R.notchBoards===1?'':'s'}`,
+     d:'Pieces that run into a stair wall or the hatch opening and need shaping. Shown with an orange dashed outline.'});
+  $('callouts').innerHTML=cards.map(c=>`<div class="co"><div class="k">${c.k}<span class="chip ${c.chip[0]}">${c.chip[1]}</span></div><div class="v">${c.v}</div><div class="d">${c.d}</div></div>`).join('');
+}
+
+function renderPlan(p,R){
+  const {RL,RW,gap}=R,mL=1150,mR=1150,mT=800,mB=760;
+  const fs=Math.max(80,Math.min(R.bw*.6,130));
+  const svg=$('plan');
+  svg.setAttribute('viewBox',`${-mL} ${-mT} ${RL+mL+mR} ${RW+mT+mB}`);
+  const pts=a=>a.map(q=>q.join(',')).join(' ');
+  const ip=[[gap,R.yB[0]+gap],[R.XS[1],R.yB[1]+gap],[RL-gap,R.yB[2]+gap],[RL-gap,R.yF[2]-gap],[R.XS[1],R.yF[1]-gap],[gap,R.yF[0]-gap]];
+  let h=`<defs>
+    <pattern id="grain" width="1700" height="61" patternUnits="userSpaceOnUse"><path class="s-grain" d="M0 18 C 400 10, 800 26, 1700 16 M0 44 C 500 52, 1100 36, 1700 46"/></pattern>
+    <pattern id="hatch" width="120" height="120" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect class="s-hbg" width="120" height="120"/><line class="s-hln" x1="0" y1="0" x2="0" y2="120"/></pattern>
+    <clipPath id="floorClip"><polygon points="${pts(ip)}"/></clipPath>
+  </defs>`;
+  h+=`<polygon class="s-sub" points="${pts(R.poly)}"/>`;
+  h+=`<g clip-path="url(#floorClip)">`;
+  for(const r of R.rows){r.pieces.forEach((pc,j)=>{if(pc.hidden)return;
+    h+=`<rect class="s-board" x="${pc.x0+2}" y="${r.y+2}" width="${Math.max(1,pc.x1-pc.x0-4)}" height="${Math.max(1,r.w-4)}" fill="${tone(r.i,j)}"><title>Row ${r.i+1}: ${mm(pc.len)} mm</title></rect>`;});}
+  h+=`<rect x="0" y="0" width="${RL}" height="${RW}" fill="url(#grain)" pointer-events="none"/>`;
+  for(const r of R.rows){const pc=r.pieces[0];if(r.s<R.L-.5)h+=`<line class="s-chalk" x1="${pc.x0+14}" y1="${r.y+6}" x2="${pc.x0+14}" y2="${r.y+r.w-6}"/>`;
+    for(const q of r.pieces)if(q.notch&&!q.hidden)h+=`<rect class="s-notch" x="${q.x0+10}" y="${r.y+10}" width="${q.x1-q.x0-20}" height="${r.w-20}"/>`;}
+  h+=`</g>`;
+  for(const e of R.ex)h+=e.kind==='wall'?`<rect class="s-wall" x="${e.x0}" y="${e.y0}" width="${e.x1-e.x0}" height="${e.y1-e.y0}"/>`
+    :`<rect x="${e.x0}" y="${e.y0}" width="${e.x1-e.x0}" height="${e.y1-e.y0}" fill="url(#hatch)"/>`;
+  h+=`<rect id="hl" class="s-hl" x="-40" y="0" width="${RL+80}" height="0" visibility="hidden"/>`;
+  h+=`<polygon class="s-room" points="${pts(R.poly)}" stroke-linejoin="miter"/>`;
+
+  // middle measuring station
+  const xm=R.XS[1];
+  h+=`<line class="s-st" x1="${xm}" y1="${R.yB[1]}" x2="${xm}" y2="${R.yF[1]}"/>`;
+
+  // chalk line
+  const Y=R.Yline;
+  h+=`<line class="s-line" x1="-60" y1="${Y}" x2="${RL+60}" y2="${Y}"/>`;
+  h+=`<text class="s-t s-c s-halo" x="${RL*0.32}" y="${Y-50}" text-anchor="middle" font-size="110">CHALK LINE</text>`;
+  const tag=(x,anchor,i)=>`<text class="s-t s-c s-halo" x="${x}" y="${Y-50}" text-anchor="${anchor}" font-size="105">↑ ${mm(R.backDist[i])} to back</text>
+    <text class="s-t s-c s-halo" x="${x}" y="${Y+140}" text-anchor="${anchor}" font-size="105">↓ ${mm(R.D[i])} to front</text>`;
+  h+=tag(80,'start',0)+tag(RL-80,'end',2);
+  if(Math.abs(xm-RL*0.32)>1200&&xm>1500&&xm<RL-1500)h+=tag(xm+60,'start',1);
+
+  // row labels
+  h+=`<text class="s-t s-c" x="-90" y="-110" text-anchor="end" font-size="${fs*.8}">Left wall cut</text>`;
+  h+=`<text class="s-t s-m" x="${RL+90}" y="-110" font-size="${fs*.8}">Right end</text>`;
+  for(const r of R.rows){const cy=r.cy;
+    h+=`<text class="s-t s-m" x="${-mL+70}" y="${cy}" dominant-baseline="central" font-size="${fs*.8}">R${r.i+1}</text>`;
+    h+=`<text class="s-t s-c" x="-90" y="${cy}" text-anchor="end" dominant-baseline="central" font-size="${fs}">${mm(r.s)}</text>`;
+    h+=`<text class="s-t s-m" x="${RL+90}" y="${cy}" dominant-baseline="central" font-size="${fs}">${r.e?mm(r.e):'—'}</text>`;}
+  // dimensions + wall names
+  const dy=-520;
+  h+=`<path class="s-dim" d="M0 ${dy} H${RL} M0 ${dy-70} V${dy+70} M${RL} ${dy-70} V${dy+70}"/>`;
+  h+=`<text class="s-t" x="${RL/2}" y="${dy-60}" text-anchor="middle" font-size="150" font-weight="600">${(RL/1000).toFixed(2)} m</text>`;
+  h+=`<text class="s-t s-ui s-m" x="${RL/2}" y="-110" text-anchor="middle" font-size="120">BACK WALL (STUD)</text>`;
+  h+=`<text class="s-t s-ui s-m" x="${RL/2}" y="${RW+230}" text-anchor="middle" font-size="120">FRONT WALL (STUD)</text>`;
+  h+=`<text class="s-t s-ui s-c" x="40" y="-110" font-size="120">◢ START</text>`;
+  const wy=RW+470;
+  h+=`<text class="s-t" x="0" y="${wy}" font-size="125" font-weight="600">Left ${(R.W[0]/1000).toFixed(3)} m</text>`;
+  h+=`<text class="s-t" x="${xm}" y="${wy}" text-anchor="middle" font-size="125" font-weight="600">Middle ${(R.W[1]/1000).toFixed(3)} m</text>`;
+  h+=`<text class="s-t" x="${RL}" y="${wy}" text-anchor="end" font-size="125" font-weight="600">Right ${(R.W[2]/1000).toFixed(3)} m</text>`;
+  h+=`<text class="s-t s-ui s-m" transform="translate(${-mL+20} ${RW/2}) rotate(-90)" text-anchor="middle" dominant-baseline="hanging" font-size="110">LEFT GABLE</text>`;
+  h+=`<text class="s-t s-ui s-m" transform="translate(${RL+mR-40} ${RW/2}) rotate(90)" text-anchor="middle" dominant-baseline="hanging" font-size="110">RIGHT GABLE</text>`;
+  // stair annotation
+  if(p.stairOn&&R.ex.length){const w1=R.ex[0],w2=R.ex[1];const front=p.stairSide==='front';
+    const ly=front?w1.y0-160:w1.y1+260;
+    h+=`<path class="s-dimc" d="M0 ${ly} H${w1.x0}"/>`;
+    h+=`<text class="s-t s-c s-halo" x="${w1.x0/2}" y="${ly-50}" text-anchor="middle" font-size="130">${(w1.x0/1000).toFixed(2)} m to stair wall</text>`;
+    const cx=(w1.x1+w2.x0)/2,cy=(w1.y0+w1.y1)/2;
+    h+=`<text class="s-t s-halo" transform="translate(${cx} ${cy}) rotate(-90)" text-anchor="middle" font-size="115"><tspan x="0" dy="-70" font-weight="600">${p.stairFloored?'Stair walls':'Stair & hatch'}</tspan><tspan x="0" dy="150">${(p.stairInner).toFixed(2)} × ${(p.stairDepth).toFixed(2)} m</tspan></text>`;}
+  svg.innerHTML=h;
+  svg.style.width=(parseFloat($('zoom').value)*100)+'%';
+}
+
+function renderTable(R){
+  $('rows').innerHTML=R.rows.map(r=>{const same=Math.max(...r.ws)-Math.min(...r.ws)<=0.5;
+    const wcell=same?mm(r.ws[0])+(r.ws[0]<R.bw-.5?' ✂':''):`<span class="w3">${w3(r.ws)}</span>`;
+    return `<tr data-r="${r.i}">
+    <td>${r.i+1}</td><td class="n">${wcell}</td>
+    <td class="n lw">${mm(r.s)}</td><td class="src">${r.sSrc}</td>
+    <td class="n">${r.full}</td><td class="n">${r.e?mm(r.e):'—'}</td><td class="src">${r.eSrc||'Ends on a full board'}</td>
+    <td>${r.notch?`<span class="chip cut">${r.notch} piece${r.notch>1?'s':''}</span>`:''}</td></tr>`;}).join('');
+}
+
+let R=null;
+function syncLine(p,R){const el=$('offR');el.disabled=p.lineDir!=='custom';if(el.disabled)el.value=Math.round(R.D[2]);}
+function update(){const p=read();R=compute(p);syncLine(p,R);p.offR=R.D[2];save(p);renderCallouts(p,R);renderPlan(p,R);renderTable(R);}
+$('rows').addEventListener('mouseover',e=>{const tr=e.target.closest('tr');const hl=$('hl');if(!tr||!hl||!R)return;
+  const r=R.rows[+tr.dataset.r];hl.setAttribute('y',r.y);hl.setAttribute('height',r.w);hl.setAttribute('visibility','visible');});
+$('rows').addEventListener('mouseleave',()=>{const hl=$('hl');if(hl)hl.setAttribute('visibility','hidden');});
+for(const k of F){$(k).addEventListener('input',update);$(k).addEventListener('change',update);}
+$('zoom').addEventListener('change',()=>{$('plan').style.width=(parseFloat($('zoom').value)*100)+'%';});
+$('reset').addEventListener('click',()=>{fill(DEF);update();});
+fill(load());update();
+if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script>
+
+</body>
+</html>
