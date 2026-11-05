@@ -141,13 +141,13 @@ td .w3{color:var(--saw)}
 
       <fieldset><legend>Chalk line</legend>
         <div class="f"><label for="lineAt">Put the line</label>
-          <select id="lineAt"><option value="row2">At the start of row 2</option><option value="offset">At a set distance</option></select></div>
+          <select id="lineAt"><option value="stair">Start of row 2, joint on stair walls</option><option value="row2">At the start of row 2</option><option value="offset">At a set distance</option></select></div>
         <div class="f"><label for="offL">From front-left corner <small>(mm)</small></label><input id="offL" type="number" step="1" min="0"></div>
         <div class="f"><label for="lineDir">Line runs</label>
           <select id="lineDir"><option value="split">Split the difference</option><option value="front">Parallel to front wall</option><option value="back">Parallel to back wall</option><option value="custom">Custom right end</option></select></div>
         <div class="f"><label for="offR">From front-right corner <small>(mm)</small></label><input id="offR" type="number" step="1" min="0"></div>
         <div class="f"><label for="offMid">Front wall to line, middle <small>(mm)</small></label><input id="offMid" type="number" step="1" min="0" placeholder="straight"></div>
-        <p class="hint">"At the start of row 2" puts the line on the front edge of row 1, measured off the back wall. The front-corner boxes then fill in for you. "At a set distance" uses the front-left distance you type, measured square off the front wall. The boards run parallel to the line. Leave the middle box empty to treat the front wall as straight. Fill it in once the line is struck and the plan shows where the bow is.</p>
+        <p class="hint">"Start of row 2, joint on stair walls" moves the rows so a joint runs across the ends of the stair walls, then puts the line on the front edge of row 1. "At the start of row 2" fits row 1 to the back wall instead. Either way the line is measured off the back wall. The front-corner boxes then fill in for you. "At a set distance" uses the front-left distance you type, measured square off the front wall, and the rows move so a joint sits on the line. The boards run parallel to the line. Leave the middle box empty to treat the front wall as straight. Fill it in once the line is struck and the plan shows where the bow is.</p>
       </fieldset>
 
       <fieldset><legend>Boards</legend>
@@ -234,7 +234,7 @@ td .w3{color:var(--saw)}
 
 <script>
 const F=['roomL','gap','wL','wM','wMidX','wR','lineAt','offL','lineDir','offR','offMid','boardL','boardW','perPack','kerf','mode','minPiece','minStagger','rip','minRow','stairOn','stairSide','stairX','stairT','stairInner','stairDepth','stairFloored','spare','rollM2'];
-const DEF={roomL:11.8,gap:10,wL:4.275,wM:4.339,wMidX:5.9,wR:4.311,lineAt:'row2',offL:1000,lineDir:'split',offR:1000,offMid:null,
+const DEF={roomL:11.8,gap:10,wL:4.275,wM:4.339,wMidX:5.9,wR:4.311,lineAt:'stair',offL:1000,lineDir:'split',offR:1000,offMid:null,
   boardL:1286,boardW:192,perPack:8,kerf:3,mode:'offcut',minPiece:300,minStagger:300,rip:'auto',minRow:60,
   stairOn:true,stairSide:'front',stairX:3.722,stairT:80,stairInner:0.821,stairDepth:2.294,stairFloored:true,spare:5,rollM2:15};
 const NULLABLE=new Set(['offMid']);
@@ -259,7 +259,7 @@ function read(){const p={};for(const k of F){const el=$(k);
   return p;}
 
 function compute(p){
-  if(p.lineAt!=='row2')return compute0(p);
+  if(p.lineAt==='offset')return compute0(p);
   // line sits on the row 1 / row 2 joint: iterate so a measured middle offset stays relative to that line
   let q={...p},R=compute0(q);
   for(let k=0;k<6&&R.bounds.length;k++){
@@ -289,15 +289,28 @@ function compute0(p){
   const interp=(a,x)=>x<=xm?a[0]+(a[1]-a[0])*x/xm:a[1]+(a[2]-a[1])*(x-xm)/(RL-xm);
   const RW=Math.max(...yF);
 
+  // stair walls, hung off the chosen wall
+  let stairEnd=null;const ex=[];
+  if(p.stairOn){const t=p.stairT,x0=p.stairX*1000,inner=p.stairInner*1000,Dp=p.stairDepth*1000;
+    const xc=Math.min(Math.max(x0+t+inner/2,0),RL);
+    const y0=p.stairSide==='front'?interp(yF,xc)-Dp:interp(yB,xc),y1=y0+Dp;
+    stairEnd=p.stairSide==='front'?y0-gap:y1+gap;
+    ex.push({x0,x1:x0+t,y0,y1,kind:'wall'},{x0:x0+t+inner,x1:x0+2*t+inner,y0,y1,kind:'wall'});
+    if(!p.stairFloored)ex.push({x0:x0+t,x1:x0+t+inner,y0,y1,kind:'hatch'});}
+
   // rows across the room, parallel to the line
   const Ybmin=Math.min(...yB)+gap,Ybmax=Math.max(...yB)+gap,Yfmin=Math.min(...yF)-gap,Yfmax=Math.max(...yF)-gap;
   let bounds=[],balanced=false;
   if(Yfmax-Ybmin>bw+1e-6){
     const nat=()=>{const b1=Ybmin+bw;const k=Math.max(0,Math.ceil((Yfmax-b1)/bw-1e-6)-1);return{b1,k};};
     const bal=()=>{const S=Yfmin-Ybmax;const k=Math.max(0,Math.floor((S-2*p.minRow)/bw));return{b1:Ybmax+(S-k*bw)/2,k};};
-    let c=nat();const lastNarrow=Yfmin-(c.b1+c.k*bw);
-    if(p.rip==='always'||(p.rip==='auto'&&lastNarrow<p.minRow)){c=bal();balanced=true;}
-    for(let j=0;j<=c.k;j++)bounds.push(c.b1+j*bw);
+    // a joint is pinned to the chalk line (set distance) or to the end of the stair walls
+    const anchor=p.lineAt==='offset'?Yline:(p.lineAt==='stair'&&stairEnd!=null?stairEnd:null);
+    if(anchor!=null){let b=anchor-Math.floor((anchor-Ybmin)/bw-1e-9)*bw;if(b<=Ybmin+1e-6)b+=bw;
+      while(b<Yfmin-1){bounds.push(b);b+=bw;}}
+    else{let c=nat();const lastNarrow=Yfmin-(c.b1+c.k*bw);
+      if(p.rip==='always'||(p.rip==='auto'&&lastNarrow<p.minRow)){c=bal();balanced=true;}
+      for(let j=0;j<=c.k;j++)bounds.push(c.b1+j*bw);}
   }
   const n=bounds.length+1;
   const rowDefs=[];
@@ -351,13 +364,6 @@ function compute0(p){
     rows.push({i,y:rd.y0,w:rd.y1-rd.y0,cy:rd.cy,ws:rd.ws,scribe:rd.scribe,s,full:o.full,e:o.e,sSrc,eSrc,pieces,notch:0});
   }
 
-  // stair walls, hung off the chosen wall
-  const ex=[];
-  if(p.stairOn){const t=p.stairT,x0=p.stairX*1000,inner=p.stairInner*1000,Dp=p.stairDepth*1000;
-    const xc=Math.min(Math.max(x0+t+inner/2,0),RL);
-    const y0=p.stairSide==='front'?interp(yF,xc)-Dp:interp(yB,xc),y1=y0+Dp;
-    ex.push({x0,x1:x0+t,y0,y1,kind:'wall'},{x0:x0+t+inner,x1:x0+2*t+inner,y0,y1,kind:'wall'});
-    if(!p.stairFloored)ex.push({x0:x0+t,x1:x0+t+inner,y0,y1,kind:'hatch'});}
   let notchBoards=0,exArea=0;
   for(const e of ex)exArea+=Math.max(0,Math.min(e.x1,RL)-Math.max(e.x0,0))*Math.max(0,e.y1-e.y0);
   for(const r of rows)for(const pc of r.pieces){pc.notch=false;pc.hidden=false;
@@ -373,13 +379,14 @@ function compute0(p){
   const withSpare=Math.ceil(newBoards*(1+p.spare/100));
 
   // nearest board joint to the chalk line
+  let stairJoint=null;if(stairEnd!=null)bounds.forEach(b=>{const d=b-stairEnd;if(stairJoint==null||Math.abs(d)<Math.abs(stairJoint))stairJoint=d;});
   let joint=null;bounds.forEach((b,j)=>{const d=Yline-b;if(!joint||Math.abs(d)<Math.abs(joint.d))joint={d,after:j+1};});
 
   const usedArea=rows.reduce((t,r)=>t+r.w,0)*UL;
   return{L,bw,gap,RL,RW,UL,XS,W,D,yF,yB,Yline,backDist,poly,rows,bounds,balanced,ex,newBoards,withSpare,
     packs:Math.ceil(withSpare/p.perPack),packM2:p.perPack*L*bw/1e6,area,rolls:Math.ceil(area/p.rollM2),notchBoards,
     waste:Math.max(0,1-(area*1e6)/(newBoards*L*bw)),joint,
-    backVar:Ybmax-Ybmin,frontVar:Yfmax-Yfmin};
+    stairJoint,backVar:Ybmax-Ybmin,frontVar:Yfmax-Yfmin};
 }
 
 const OAK=['#e2c9a0','#ecdcbe','#d6b88b','#e8d4b1','#dcc096','#efe1c6','#d2b283','#e5ceab'];
@@ -389,7 +396,7 @@ const mm=v=>Math.round(v).toLocaleString('en-GB');
 const m2=v=>v.toFixed(2);
 const w3=ws=>ws.map(mm).join(' / ');
 const rowState=(ws,bw)=>{const mx=Math.max(...ws),mn=Math.min(...ws);
-  if(mn<=0)return['cut','Check row'];if(mx>bw+.5)return['cut','Too wide'];
+  if(mn<=0)return['cut','Check row'];if(mx>bw+5)return['cut','Too wide'];
   if(mx-mn>2)return['cut','Scribe to wall'];if(mx<bw-.5)return['cut','Rip lengthways'];return['ok','Full width'];};
 
 function renderCallouts(p,R){
@@ -397,7 +404,7 @@ function renderCallouts(p,R){
   const firstCut=r0.s<R.L-.5;
   const rowNote=(ws,wall)=>{const mx=Math.max(...ws),mn=Math.min(...ws);
     if(mn<=0)return `The ${wall} wall comes in so far this row runs out. Move the chalk line or set "Rip first row" to balance.`;
-    if(mx>R.bw+.5)return `The ${wall} wall is out by more than a board width, so this row needs a second strip.`;
+    if(mx>R.bw+5)return `The ${wall} wall is out by more than a board width, so this row needs a second strip.`;
     if(mx-mn>2)return `Scribe to the ${wall} wall: it tapers ${mm(mx-mn)} mm along the room. Left / middle / right shown.`;
     return mn<p.minRow?'Narrower than your limit. Set "Rip first row" to balance it.':`Same width the full length.`;};
   const j=R.joint;
@@ -419,6 +426,9 @@ function renderCallouts(p,R){
      d:`${R.packs} packs of ${p.perPack} (${m2(R.packM2)} m² each). ${R.newBoards} boards actually cut into, ~${Math.round(R.waste*100)}% waste.`},
     {k:'Floor area',chip:['info','Underlay'],v:`${m2(R.area)} m²`,d:`${R.rolls} roll${R.rolls>1?'s':''} of underlay at ${p.rollM2} m² per roll. ${R.rows.length} rows in total.`},
   ];
+  if(p.stairOn){const sj=R.stairJoint,on=sj!=null&&Math.abs(sj)<1;cards.push({k:'Stair wall ends',chip:on?['ok','Joint lines up']:['cut','Joint off'],
+     v:sj==null?'—':on?'0 mm':`${mm(Math.abs(sj))} mm ${sj>0?'past':'short'}`,
+     d:on?'A board joint runs straight across the ends of the stair walls, so the row in front of them needs no notches.':'Nearest board joint to the end of the stair walls. Set "Put the line" to "Start of row 2, joint on stair walls" to line it up.'});}
   if(p.stairOn)cards.push({k:'Around stair walls',chip:R.notchBoards?['cut','Notch cuts']:['ok','None'],v:`${R.notchBoards} piece${R.notchBoards===1?'':'s'}`,
      d:'Pieces that run into a stair wall or the hatch opening and need shaping. Listed row by row in the cut list.'});
   $('callouts').innerHTML=cards.map(c=>`<div class="co"><div class="k">${c.k}<span class="chip ${c.chip[0]}">${c.chip[1]}</span></div><div class="v">${c.v}</div><div class="d">${c.d}</div></div>`).join('');
@@ -516,8 +526,8 @@ function renderTable(R){
 }
 
 let R=null;
-function syncLine(p,R){if(locked){const eL=$('offL'),el=$('offR');if(p.lineAt==='row2')eL.value=Math.round(R.D[0]);if(p.lineDir!=='custom'||p.lineAt==='row2')el.value=Math.round(R.D[2]);return;}const r2=p.lineAt==='row2',el=$('offR'),eL=$('offL');eL.disabled=r2;if(r2)eL.value=Math.round(R.D[0]);el.disabled=p.lineDir!=='custom'||r2;if(el.disabled)el.value=Math.round(R.D[2]);}
-function update(){const p=read();R=compute(p);syncLine(p,R);p.offR=Math.round(R.D[2]);if(p.lineAt==='row2')p.offL=Math.round(R.D[0]);save(p);renderCallouts(p,R);renderPlan(p,R);renderTable(R);}
+function syncLine(p,R){const r2=p.lineAt!=='offset';if(locked){const eL=$('offL'),el=$('offR');if(r2)eL.value=Math.round(R.D[0]);if(p.lineDir!=='custom'||r2)el.value=Math.round(R.D[2]);return;}const el=$('offR'),eL=$('offL');eL.disabled=r2;if(r2)eL.value=Math.round(R.D[0]);el.disabled=p.lineDir!=='custom'||r2;if(el.disabled)el.value=Math.round(R.D[2]);}
+function update(){const p=read();R=compute(p);syncLine(p,R);p.offR=Math.round(R.D[2]);if(p.lineAt!=='offset')p.offL=Math.round(R.D[0]);save(p);renderCallouts(p,R);renderPlan(p,R);renderTable(R);}
 $('rows').addEventListener('mouseover',e=>{const tr=e.target.closest('tr');const hl=$('hl');if(!tr||!hl||!R)return;
   const r=R.rows[+tr.dataset.r];hl.setAttribute('y',r.y);hl.setAttribute('height',r.w);hl.setAttribute('visibility','visible');});
 $('rows').addEventListener('mouseleave',()=>{const hl=$('hl');if(hl)hl.setAttribute('visibility','hidden');});
