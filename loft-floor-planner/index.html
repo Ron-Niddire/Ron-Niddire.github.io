@@ -106,6 +106,18 @@ th.n{text-align:right}
 td.lw{color:var(--chalk);font-weight:600}
 td.src{color:var(--muted)}
 tbody tr:hover,tbody tr.on{background:var(--hover)}
+.cutWrap{display:inline-flex;align-items:center;gap:4px;justify-content:flex-end}
+.cutIn{width:76px;font:inherit;font-family:var(--f-num);font-weight:600;font-size:14px;color:var(--chalk);text-align:right;padding:4px 6px;border:1px solid var(--line);border-radius:5px;background:var(--bg)}
+.cutIn.man{color:var(--saw);border-color:var(--saw);background:var(--panel)}
+.clr{padding:2px 7px;font-size:14px;line-height:1.2;color:var(--saw)}
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
+.tools button{padding:7px 12px}
+.nudge{display:inline-flex;gap:4px}
+.nudge button{min-width:40px;font-family:var(--f-num)}
+#moveBtn[aria-pressed="true"]{background:var(--chalk);color:#fff;border-color:var(--chalk)}
+#shiftInfo{font-size:13px;color:var(--muted);font-family:var(--f-num)}
+#plan.moving{touch-action:none;cursor:grab}
+#plan.moving.dragging{cursor:grabbing}
 .notes{font-size:13.5px;color:var(--muted);max-width:90ch}
 .notes li{margin:3px 0}
 /* SVG */
@@ -252,16 +264,24 @@ td .w3{color:var(--saw)}
           <label class="zoom" for="zoom">Zoom
             <select id="zoom"><option value="1">Fit</option><option value="1.5">150%</option><option value="2">200%</option><option value="3">300%</option></select></label>
         </div>
+        <div class="tools">
+          <button id="moveBtn" type="button" aria-pressed="false">✋ Move floor</button>
+          <button id="undoBtn" type="button" disabled>↶ Undo</button>
+          <button id="redoBtn" type="button" disabled>↷ Redo</button>
+          <span class="nudge" role="group" aria-label="Nudge the floor 10 mm"><button type="button" data-nx="-10" aria-label="Left 10 mm">←</button><button type="button" data-nx="10" aria-label="Right 10 mm">→</button><button type="button" data-ny="-10" aria-label="Up 10 mm">↑</button><button type="button" data-ny="10" aria-label="Down 10 mm">↓</button></span>
+          <button id="centreBtn" type="button">Reset position</button>
+          <span id="shiftInfo"></span>
+        </div>
         <div class="planWrap"><div id="tip" class="tip" hidden></div><div class="planScroll"><svg id="plan" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Floor plan with board layout"></svg></div></div>
       </section>
 
       <section class="card">
         <h2>Row by row cut list</h2>
-        <p class="hint">Row 1 is against the back wall. Hover a row to find it on the plan. Lengths are face length in mm.</p>
+        <p class="hint">Row 1 is against the back wall. Lengths are face length in mm. Type over a left wall piece to match what you laid; × puts it back to the plan. Joint offset is how far each row's left joint sits from the row above.</p>
         <div class="tscroll">
           <table>
             <thead><tr>
-              <th>Row</th><th class="n">Width L / M / R</th><th class="n">Left wall piece</th><th>Comes from</th>
+              <th>Row</th><th class="n">Width L / M / R</th><th class="n">Left wall piece</th><th>Comes from</th><th class="n">Joint offset</th>
               <th class="n">Full boards</th><th class="n">Right wall piece</th><th>Comes from</th><th>Stair cut</th>
             </tr></thead>
             <tbody id="rows"></tbody>
@@ -281,20 +301,23 @@ td .w3{color:var(--saw)}
 
 <script>
 const F=['roomL','gap','wL','wM','wMidX','wR','lineAt','offL','lineDir','offR','offMid','boardL','boardW','perPack','kerf','mode','minPiece','minStagger','rip','minRow','stairOn','stairSide','stairX','stairT','stairInner','stairDepth','stairFloored','spare','rollM2'];
-const DEF={roomL:11.441,gap:10,wL:4.275,wM:4.339,wMidX:5.9,wR:4.311,lineAt:'stair',offL:1000,lineDir:'split',offR:1000,offMid:null,
+const EXK=['shiftX','shiftY','manual'];
+const DEF={shiftX:0,shiftY:0,manual:{},roomL:11.441,gap:10,wL:4.275,wM:4.339,wMidX:5.9,wR:4.311,lineAt:'stair',offL:1000,lineDir:'split',offR:1000,offMid:null,
   boardL:1285,boardW:192,perPack:8,kerf:3,mode:'offcut',minPiece:300,minStagger:300,rip:'auto',minRow:60,
   stairOn:true,stairSide:'front',stairX:3.722,stairT:80,stairInner:0.821,stairDepth:2.294,stairFloored:true,spare:5,rollM2:15};
 const NULLABLE=new Set(['offMid']);
 const KEY='loft-floor-planner-v2',LKEY='loft-floor-planner-lock';
 const $=id=>document.getElementById(id);
 
+const KEYS=[...F,...EXK];
+let EX={shiftX:0,shiftY:0,manual:{}};
 const FORCE={v:3,vals:{roomL:11.441,boardL:1285}};
 function load(){let s={};try{s=JSON.parse(localStorage.getItem(KEY)||'{}')||{}}catch(e){}
   if((s._v||0)<FORCE.v){Object.assign(s,FORCE.vals);s._v=FORCE.v;try{localStorage.setItem(KEY,JSON.stringify(s))}catch(e){}}
   if(s.roomW!=null&&s.wL==null){s.wL=s.wM=s.wR=s.roomW;}
   return {...DEF,...s};}
 function save(p){try{localStorage.setItem(KEY,JSON.stringify({...p,_v:FORCE.v}))}catch(e){}}
-function fill(p){for(const k of F){const el=$(k);if(el.type==='checkbox')el.checked=!!p[k];else el.value=p[k]==null?'':p[k];}}
+function fill(p){EX={shiftX:+p.shiftX||0,shiftY:+p.shiftY||0,manual:{...(p.manual||{})}};for(const k of F){const el=$(k);if(el.type==='checkbox')el.checked=!!p[k];else el.value=p[k]==null?'':p[k];}}
 function read(){const p={};for(const k of F){const el=$(k);
   if(el.type==='checkbox')p[k]=el.checked;else if(el.tagName==='SELECT')p[k]=el.value;
   else if(NULLABLE.has(k)&&el.value.trim()==='')p[k]=null;
@@ -305,6 +328,7 @@ function read(){const p={};for(const k of F){const el=$(k);
   p.gap=Math.max(0,p.gap);p.kerf=Math.max(0,p.kerf);p.perPack=Math.max(1,Math.round(p.perPack));
   p.minPiece=Math.max(50,Math.min(p.minPiece,p.boardL));p.minStagger=Math.max(0,Math.min(p.minStagger,p.boardL/2));
   p.minRow=Math.max(10,p.minRow);p.rollM2=Math.max(1,p.rollM2);p.spare=Math.max(0,p.spare);
+  p.shiftX=EX.shiftX;p.shiftY=EX.shiftY;p.manual={...EX.manual};
   return p;}
 
 function compute(p){
@@ -360,6 +384,8 @@ function compute0(p){
     else{let c=nat();const lastNarrow=Yfmin-(c.b1+c.k*bw);
       if(p.rip==='always'||(p.rip==='auto'&&lastNarrow<p.minRow)){c=bal();balanced=true;}
       for(let j=0;j<=c.k;j++)bounds.push(c.b1+j*bw);}
+    if(p.shiftY&&bounds.length){const a=bounds[0]+p.shiftY;bounds=[];
+      let b=a-Math.floor((a-Ybmin)/bw-1e-9)*bw;if(b<=Ybmin+1e-6)b+=bw;while(b<Yfmin-1){bounds.push(b);b+=bw;}}
   }
   const n=bounds.length+1;
   const rowDefs=[];
@@ -375,7 +401,8 @@ function compute0(p){
   const okLen=s=>{const o=endOf(s);return s>=Math.min(minP,UL)-1e-6&&s<=L+1e-6&&(o.e===0||o.e>=minP-1e-6);};
   const dist=(a,b)=>{const d=((a-b)%L+L)%L;return Math.min(d,L-d);};
 
-  const rows=[],rPool=[],lPool=[];let newBoards=0,carry=null;
+  const man=p.manual||{},clampS=v=>Math.min(Math.max(1,Math.round(v)),Math.min(L,UL));
+  const runRows=fixed=>{const rows=[],rPool=[],lPool=[];let newBoards=0,carry=null;
   for(let i=0;i<n;i++){
     const prev=i>0?rows[i-1].s:null,prev2=i>1?rows[i-2].s:null;
     const valid=(s,strict=true)=>okLen(s)&&(prev==null||dist(s,prev)>=p.minStagger-1e-6)&&(!strict||prev2==null||dist(s,prev2)>=100);
@@ -385,7 +412,9 @@ function compute0(p){
       let best=null,bs=-1;for(let c=L;c>=minP;c-=5)if(okLen(c)&&score(c)>bs){bs=score(c);best=c;}
       return best??Math.min(L,UL);};
     let s,item=null;
-    if(i===0)s=nearest(L);
+    if(fixed)s=fixed[i];
+    else if(man[i]!=null)s=clampS(man[i]);
+    else if(i===0)s=nearest(L);
     else if(p.mode==='offcut'){
       if(carry&&rPool.includes(carry)&&valid(carry.len)){item=carry;s=carry.len;}
       else{const c=rPool.filter(it=>valid(it.len)).sort((a,b)=>score(b.len)-score(a.len));
@@ -398,7 +427,7 @@ function compute0(p){
     if(item){rPool.splice(rPool.indexOf(item),1);sSrc=`Offcut from row ${item.from+1}`;}
     else if(s>=L-.5){newBoards++;sSrc='Full board, no cut';}
     else{const fit=rPool.filter(it=>it.len>=s).sort((a,b)=>a.len-b.len)[0];
-      if(fit){rPool.splice(rPool.indexOf(fit),1);sSrc=`Trim offcut from row ${fit.from+1}`;}
+      if(fit){rPool.splice(rPool.indexOf(fit),1);sSrc=`${fit.len-s<3?'Offcut':'Trim offcut'} from row ${fit.from+1}`;}
       else{newBoards++;const r=Math.round(L-s-kerf);if(r>=minP)lPool.push({len:r,from:i});sSrc='Cut from new board';}}
     newBoards+=o.full;
     let eSrc='',carryNew=null;
@@ -412,6 +441,12 @@ function compute0(p){
     const rd=rowDefs[i];
     rows.push({i,y:rd.y0,w:rd.y1-rd.y0,cy:rd.cy,ws:rd.ws,scribe:rd.scribe,s,full:o.full,e:o.e,sSrc,eSrc,pieces,notch:0});
   }
+  return {rows,newBoards};};
+  let {rows,newBoards}=runRows(null);
+  if(p.shiftX){const fx=rows.map((r,i)=>{if(man[i]!=null)return clampS(man[i]);let v=((r.s+p.shiftX)%L+L)%L;if(v<1)v=L;return clampS(v);});
+    ({rows,newBoards}=runRows(fx));}
+  rows.forEach((r,i)=>{r.manual=man[i]!=null;r.short=r.s<minP-.5||(r.e>0&&r.e<minP-.5);
+    r.stag=i>0?Math.round(dist(r.s,rows[i-1].s)):null;r.stagBad=r.stag!=null&&r.stag<p.minStagger-.5;});
 
   let notchBoards=0,exArea=0;
   for(const e of ex)exArea+=Math.max(0,Math.min(e.x1,RL)-Math.max(e.x0,0))*Math.max(0,e.y1-e.y0);
@@ -538,7 +573,7 @@ function renderPlan(p,R){
   h+=`<text class="s-t s-m" x="${RL+90}" y="-110" font-size="${fs*.8}">Right end</text>`;
   for(const r of R.rows){const cy=r.cy;
     h+=`<text class="s-t s-m" x="${-mL+70}" y="${cy}" dominant-baseline="central" font-size="${fs*.8}">R${r.i+1}</text>`;
-    h+=`<text class="s-t s-c" x="-90" y="${cy}" text-anchor="end" dominant-baseline="central" font-size="${fs}">${mm(r.s)}</text>`;
+    h+=`<text class="s-t s-c" x="-90" y="${cy}" text-anchor="end" dominant-baseline="central" font-size="${fs}"${r.manual?' style="fill:var(--saw)"':''}>${mm(r.s)}</text>`;
     h+=`<text class="s-t s-m" x="${RL+90}" y="${cy}" dominant-baseline="central" font-size="${fs}">${r.e?mm(r.e):'—'}</text>`;}
   // dimensions + wall names
   const dy=-520;
@@ -569,15 +604,30 @@ function renderTable(R){
     const wcell=same?mm(r.ws[0])+(r.ws[0]<R.bw-.5?' ✂':''):`<span class="w3">${w3(r.ws)}</span>`;
     return `<tr data-r="${r.i}">
     <td>${r.i+1}</td><td class="n">${wcell}</td>
-    <td class="n lw">${mm(r.s)}</td><td class="src">${r.sSrc}</td>
+    <td class="n lw"><span class="cutWrap"><input class="cutIn${r.manual?' man':''}" type="number" inputmode="numeric" min="1" max="${R.L}" step="1" data-r="${r.i}" value="${Math.round(r.s)}" aria-label="Row ${r.i+1} left wall piece (mm)">${r.manual?`<button type="button" class="clr" data-clr="${r.i}" title="Back to the planned length" aria-label="Clear row ${r.i+1} manual length">×</button>`:''}</span></td><td class="src">${r.manual?'<b>Your length</b> · ':''}${r.sSrc}${r.short?' <span class="chip cut">Short piece</span>':''}</td>
+    <td class="n">${r.stag==null?'—':mm(r.stag)}${r.stagBad?' <span class="chip cut">Too close</span>':''}</td>
     <td class="n">${r.full}</td><td class="n">${r.e?mm(r.e):'—'}</td><td class="src">${r.eSrc||'Ends on a full board'}</td>
     <td>${r.notch?`<span class="chip cut">${r.notch} piece${r.notch>1?'s':''}</span>`:''}</td></tr>`;}).join('');
 }
 
 let R=null,HL=null;
+// ---- undo / redo ----
+let hist=[],fut=[],lastSnap=null,lastPushT=0,restoring=false;
+function noteHistory(p){const cur=norm(p);if(lastSnap==null){lastSnap=cur;return;}if(cur===lastSnap)return;
+  if(!restoring&&!applying&&Date.now()-lastPushT>1200){hist.push(lastSnap);if(hist.length>60)hist.shift();fut=[];}
+  if(!restoring)lastPushT=Date.now();lastSnap=cur;histButtons();}
+function histButtons(){$('undoBtn').disabled=!hist.length;$('redoBtn').disabled=!fut.length;}
+function restore(js){restoring=true;fill(JSON.parse(js));update();restoring=false;lastPushT=0;histButtons();}
+function undo(){if(!hist.length)return;fut.push(lastSnap);restore(hist.pop());toast('Undone');}
+function redo(){if(!fut.length)return;hist.push(lastSnap);restore(fut.pop());toast('Redone');}
+function showShift(){const L=R?R.L:1285,x=((EX.shiftX%L)+L)%L,y=EX.shiftY;const parts=[];
+  if(x)parts.push(`${mm(x)} mm right`);if(Math.round(y))parts.push(`${mm(Math.abs(y))} mm ${y>0?'down':'up'}`);
+  const m=Object.keys(EX.manual).length;if(m)parts.push(`${m} row${m>1?'s':''} set by you`);
+  $('shiftInfo').textContent=parts.length?'Moved: '+parts.join(' · '):'';}
+
 // ---- sync through the Claude account (only inside the Claude app / claude.ai) ----
 let cloud=null,cloudReady=false,applying=false,lastCloud='',pushT=null,pushing=false;
-const norm=p=>{const o={};for(const k of F)o[k]=p[k]??null;return JSON.stringify(o);};
+const norm=p=>{const o={};for(const k of KEYS)o[k]=p[k]??null;return JSON.stringify(o);};
 function syncState(t,cls){const e=$('syncState');if(!e)return;e.textContent=t;e.className='syncState '+(cls||'');e.hidden=false;}
 function queuePush(p){if(!cloud||!cloudReady||applying)return;const js=norm(p);if(js===lastCloud)return;
   clearTimeout(pushT);pushT=setTimeout(async()=>{if(pushing){queuePush(read());return;}const cur=norm(read());if(cur===lastCloud)return;
@@ -597,11 +647,11 @@ function queuePush(p){if(!cloud||!cloudReady||applying)return;const js=norm(p);i
 const APP_URL='https://ron-niddire.github.io/loft-floor-planner/';
 const b64e=str=>btoa(unescape(encodeURIComponent(str))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 const b64d=str=>{str=str.replace(/-/g,'+').replace(/_/g,'/');while(str.length%4)str+='=';return decodeURIComponent(escape(atob(str)));};
-function settingsLink(){const p=read();const diff={};for(const k of F)if(JSON.stringify(p[k])!==JSON.stringify(DEF[k]))diff[k]=p[k];
+function settingsLink(){const p=read();const diff={};for(const k of KEYS)if(JSON.stringify(p[k])!==JSON.stringify(DEF[k]))diff[k]=p[k];
   return APP_URL+'#s='+b64e(JSON.stringify(diff));}
 function parseSettings(text){const m=String(text||'').match(/[#?&]?s=([A-Za-z0-9_-]+)/);if(!m)return null;
   try{const o=JSON.parse(b64d(m[1]));return o&&typeof o==='object'?o:null;}catch(e){return null;}}
-function applySettings(o){const p={...DEF};for(const k of F)if(k in o)p[k]=o[k];fill(p);update();}
+function applySettings(o){const p={...DEF};for(const k of KEYS)if(k in o)p[k]=o[k];fill(p);update();}
 function toast(msg){const t=$('toast');t.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,3000);}
 function showQR(link){const box=$('qr');box.innerHTML='';
   if(typeof qrcode!=='function'){box.textContent='QR not available offline';return;}
@@ -623,12 +673,12 @@ function showTip(ev){const g=ev.target.closest&&ev.target.closest('g[data-r]');c
   document.querySelectorAll('#rows tr.on').forEach(t=>t.classList.remove('on'));
   const tr=document.querySelector(`#rows tr[data-r="${r.i}"]`);if(tr)tr.classList.add('on');}
 function hideTip(){$('tip').hidden=true;const hl=$('hl');if(hl)hl.setAttribute('visibility','hidden');document.querySelectorAll('#rows tr.on').forEach(t=>t.classList.remove('on'));}
-$('plan').addEventListener('pointermove',e=>{if(e.pointerType==='mouse')showTip(e);});
+$('plan').addEventListener('pointermove',e=>{if(e.pointerType==='mouse'&&!moveMode)showTip(e);});
 $('plan').addEventListener('pointerleave',e=>{if(e.pointerType==='mouse')hideTip();});
-$('plan').addEventListener('click',showTip);
+$('plan').addEventListener('click',e=>{if(!moveMode)showTip(e);});
 document.addEventListener('click',e=>{if(!e.target.closest('#plan'))hideTip();});
 function syncLine(p,R){const r2=p.lineAt!=='offset';if(locked){const eL=$('offL'),el=$('offR');if(r2)eL.value=Math.round(R.D[0]);if(p.lineDir!=='custom'||r2)el.value=Math.round(R.D[2]);return;}const el=$('offR'),eL=$('offL');eL.disabled=r2;if(r2)eL.value=Math.round(R.D[0]);el.disabled=p.lineDir!=='custom'||r2;if(el.disabled)el.value=Math.round(R.D[2]);}
-function update(){const p=read();R=compute(p);syncLine(p,R);p.offR=Math.round(R.D[2]);if(p.lineAt!=='offset')p.offL=Math.round(R.D[0]);save(p);queuePush(p);renderCallouts(p,R);renderPlan(p,R);renderTable(R);}
+function update(){const p=read();R=compute(p);syncLine(p,R);p.offR=Math.round(R.D[2]);if(p.lineAt!=='offset')p.offL=Math.round(R.D[0]);save(p);queuePush(p);noteHistory(p);renderCallouts(p,R);renderPlan(p,R);renderTable(R);showShift();}
 $('rows').addEventListener('mouseover',e=>{const tr=e.target.closest('tr');const hl=$('hl');if(!tr||!hl||!R)return;
   const r=R.rows[+tr.dataset.r];hl.setAttribute('y',r.y);hl.setAttribute('height',r.w);hl.setAttribute('visibility','visible');});
 $('rows').addEventListener('mouseleave',()=>{const hl=$('hl');if(hl)hl.setAttribute('visibility','hidden');});
@@ -647,7 +697,7 @@ $('side').addEventListener('click',e=>{if(!locked||e.target.closest('#lockbar'))
   bar.scrollIntoView({block:'nearest',behavior:'smooth'});});
 fill(load());
 // settings arriving in a link (QR scan)
-{const o=parseSettings(location.hash);if(o){const p={...DEF};for(const k of F)if(k in o)p[k]=o[k];fill(p);
+{const o=parseSettings(location.hash);if(o){const p={...DEF};for(const k of KEYS)if(k in o)p[k]=o[k];fill(p);
   try{history.replaceState(null,'',location.pathname)}catch(e){}setTimeout(()=>toast('Settings loaded from the Studio'),300);}}
 update();applyLock();
 if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
@@ -662,6 +712,27 @@ $('pasteBtn').addEventListener('click',async()=>{try{const t=await navigator.cli
 function loadFromBox(){const o=parseSettings($('recvLink').value);if(!o){$('recvMsg').textContent="That doesn't look like a settings link. Copy it again on the Studio.";return;}
   applySettings(o);$('recvPanel').hidden=true;$('recvLink').value='';toast('Settings loaded from the Studio');}
 $('loadBtn').addEventListener('click',loadFromBox);
+$('undoBtn').addEventListener('click',undo);$('redoBtn').addEventListener('click',redo);
+document.addEventListener('keydown',e=>{if(!(e.metaKey||e.ctrlKey)||e.key.toLowerCase()!=='z')return;const t=e.target;if(t&&/INPUT|SELECT|TEXTAREA/.test(t.tagName))return;e.preventDefault();e.shiftKey?redo():undo();});
+document.querySelectorAll('[data-nx],[data-ny]').forEach(b=>b.addEventListener('click',()=>{if(Date.now()-lastPushT>1200)lastPushT=0;
+  EX.shiftX+=+(b.dataset.nx||0);EX.shiftY+=+(b.dataset.ny||0);update();}));
+$('centreBtn').addEventListener('click',()=>{if(!EX.shiftX&&!EX.shiftY)return;EX.shiftX=0;EX.shiftY=0;lastPushT=0;update();});
+$('rows').addEventListener('change',e=>{const inp=e.target.closest('.cutIn');if(!inp)return;const v=parseFloat(inp.value);const i=+inp.dataset.r;
+  lastPushT=0;if(!isFinite(v)||v<=0)delete EX.manual[i];else EX.manual[i]=Math.round(v);update();toast(`Row ${i+1} left piece set to ${mm(EX.manual[i]??R.rows[i].s)} mm`);});
+$('rows').addEventListener('click',e=>{const b=e.target.closest('[data-clr]');if(!b)return;lastPushT=0;delete EX.manual[+b.dataset.clr];update();});
+let moveMode=false,drag=null,dragRAF=0;
+$('moveBtn').addEventListener('click',()=>{moveMode=!moveMode;$('moveBtn').setAttribute('aria-pressed',String(moveMode));$('plan').classList.toggle('moving',moveMode);
+  $('moveBtn').textContent=moveMode?'✋ Moving: drag the floor':'✋ Move floor';hideTip();});
+function svgPt(ev){const svg=$('plan'),pt=svg.createSVGPoint();pt.x=ev.clientX;pt.y=ev.clientY;return pt.matrixTransform(svg.getScreenCTM().inverse());}
+$('plan').addEventListener('pointerdown',e=>{if(!moveMode)return;e.preventDefault();$('plan').setPointerCapture(e.pointerId);
+  drag={id:e.pointerId,p0:svgPt(e),x0:EX.shiftX,y0:EX.shiftY,moved:false};$('plan').classList.add('dragging');lastPushT=0;});
+$('plan').addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.id)return;const q=svgPt(e);
+  EX.shiftX=Math.round(drag.x0+q.x-drag.p0.x);EX.shiftY=Math.round(drag.y0+q.y-drag.p0.y);drag.moved=true;
+  if(!dragRAF)dragRAF=requestAnimationFrame(()=>{dragRAF=0;const p=read();R=compute(p);renderPlan(p,R);showShift();});});
+const endDrag=e=>{if(!drag||e.pointerId!==drag.id)return;const L=R.L;EX.shiftX=((EX.shiftX%L)+L)%L;if(EX.shiftX>L/2)EX.shiftX-=L;
+  const bw=R.bw;EX.shiftY=((EX.shiftY%bw)+bw)%bw;if(EX.shiftY>bw/2)EX.shiftY-=bw;
+  drag=null;$('plan').classList.remove('dragging');cancelAnimationFrame(dragRAF);dragRAF=0;update();};
+$('plan').addEventListener('pointerup',endDrag);$('plan').addEventListener('pointercancel',endDrag);
 let scanStream=null;
 function stopScan(){if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null;}$('scanBox').hidden=true;}
 if(typeof jsQR!=='function'||!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia))$('scanRow').hidden=true;
