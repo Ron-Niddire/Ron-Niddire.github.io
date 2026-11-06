@@ -98,6 +98,8 @@ main{display:flex;flex-direction:column;gap:18px;min-width:0}
 .s-st,.s-line,.s-t,.s-room,.s-hl,.s-dim,.s-dimc,.s-chalk{pointer-events:none}
 .s-linehit{stroke:transparent;stroke-width:140;pointer-events:none}
 .s-handle{display:none}
+.s-lead{display:none}
+#plan.moving .s-lead{display:inline}
 .s-handle rect{fill:var(--chalk)} .s-handle path{fill:#fff}
 #plan.moving .s-linehit{pointer-events:stroke;cursor:ns-resize}
 #plan.moving .s-handle{display:inline;cursor:ns-resize}
@@ -573,8 +575,9 @@ function renderPlan(p,R){
   // chalk line
   const Y=R.Yline;
   h+=`<line class="s-line" x1="-60" y1="${Y}" x2="${RL+60}" y2="${Y}"/>`;
-  h+=`<line class="s-linehit" data-line="1" x1="-260" y1="${Y}" x2="${RL+60}" y2="${Y}"/>`;
-  h+=`<g class="s-handle" data-line="1" transform="translate(-170 ${Y})"><rect x="-80" y="-80" width="160" height="160" rx="40"/><path d="M0 -52 L28 -16 H-28 Z M0 52 L28 16 H-28 Z"/></g>`;
+  h+=`<line class="s-linehit" data-line="1" x1="-800" y1="${Y}" x2="${RL+60}" y2="${Y}"/>`;
+  h+=`<line class="s-line s-lead" x1="-610" y1="${Y}" x2="-60" y2="${Y}"/>`;
+  h+=`<g class="s-handle" data-line="1" transform="translate(-690 ${Y})"><rect x="-80" y="-80" width="160" height="160" rx="40"/><path d="M0 -52 L28 -16 H-28 Z M0 52 L28 16 H-28 Z"/></g>`;
   h+=`<text class="s-t s-c s-halo" x="${RL*0.32}" y="${Y-50}" text-anchor="middle" font-size="110">CHALK LINE</text>`;
   const tag=(x,anchor,i)=>`<text class="s-t s-c s-halo" x="${x}" y="${Y-50}" text-anchor="${anchor}" font-size="105">↑ ${mm(R.backDist[i])} to back</text>
     <text class="s-t s-c s-halo" x="${x}" y="${Y+140}" text-anchor="${anchor}" font-size="105">↓ ${mm(R.D[i])} to front</text>`;
@@ -599,7 +602,6 @@ function renderPlan(p,R){
   h+=`<text class="s-t" x="0" y="${wy}" font-size="125" font-weight="600">Left ${(R.W[0]/1000).toFixed(3)} m</text>`;
   h+=`<text class="s-t" x="${xm}" y="${wy}" text-anchor="middle" font-size="125" font-weight="600">Middle ${(R.W[1]/1000).toFixed(3)} m</text>`;
   h+=`<text class="s-t" x="${RL}" y="${wy}" text-anchor="end" font-size="125" font-weight="600">Right ${(R.W[2]/1000).toFixed(3)} m</text>`;
-  h+=`<text class="s-t s-ui s-m" transform="translate(${-mL+20} ${RW/2}) rotate(-90)" text-anchor="middle" dominant-baseline="hanging" font-size="110">LEFT GABLE</text>`;
   h+=`<text class="s-t s-ui s-m" transform="translate(${RL+mR-40} ${RW/2}) rotate(90)" text-anchor="middle" dominant-baseline="hanging" font-size="110">RIGHT GABLE</text>`;
   // stair annotation
   if(p.stairOn&&R.ex.length){const w1=R.ex[0],w2=R.ex[1];const front=p.stairSide==='front';
