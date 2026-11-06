@@ -139,6 +139,9 @@ tbody tr:hover,tbody tr.on{background:var(--hover)}
 .tabDel.arm{background:var(--saw);color:#fff;border-color:var(--saw)}
 .tabName{font:inherit;font-weight:700;font-size:15px;padding:6px 10px;border:2px solid var(--chalk);border-radius:8px;width:12em;max-width:60vw;background:var(--panel);color:var(--ink)}
 #rowBtn[aria-pressed="true"]{background:var(--saw);color:#fff;border-color:var(--saw)}
+#lastBtn[aria-pressed="true"]{background:var(--saw);color:#fff;border-color:var(--saw)}
+.s-last{fill:var(--saw);font-family:var(--f-num);font-weight:700}
+.s-lastln{stroke:var(--saw);stroke-width:9;fill:none}
 #moveBtn[aria-pressed="true"]{background:var(--chalk);color:#fff;border-color:var(--chalk)}
 #shiftInfo{font-size:13px;color:var(--muted);font-family:var(--f-num)}
 #plan.moving{touch-action:none;cursor:grab}
@@ -296,6 +299,7 @@ td .w3{color:var(--saw)}
           <span class="nudge" role="group" aria-label="Nudge the floor 10 mm"><button type="button" data-nx="-10" aria-label="Left 10 mm">←</button><button type="button" data-nx="10" aria-label="Right 10 mm">→</button><button type="button" data-ny="-10" aria-label="Up 10 mm">↑</button><button type="button" data-ny="10" aria-label="Down 10 mm">↓</button></span>
           <span class="nudge" role="group" aria-label="Move the chalk line a row"><button type="button" id="lineUp">Line ↑</button><button type="button" id="lineDn">Line ↓</button></span>
           <button id="centreBtn" type="button">Reset position</button>
+          <button id="lastBtn" type="button" aria-pressed="true">▭ Last row widths</button>
           <span id="shiftInfo"></span>
         </div>
         <div class="planWrap"><div id="tip" class="tip" hidden></div><input id="cutEd" class="cutEd" type="number" inputmode="numeric" min="1" step="1" hidden aria-label="Left wall piece (mm)"><div class="planScroll"><svg id="plan" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Floor plan with board layout"></svg></div></div>
@@ -558,7 +562,7 @@ const GRAIN=(()=>{let seed=11;const rnd=()=>{seed=(seed*16807)%2147483647;return
     out+=`<pattern id="g${k}" width="${W}" height="${H}" patternUnits="userSpaceOnUse" patternTransform="translate(${Math.round(rnd()*W)} ${Math.round(rnd()*H)})"><path class="s-grain" d="${d}"/></pattern>`;}
   return out;})();
 function renderPlan(p,R){
-  const {RL,RW,gap}=R,mL=1500,mR=1150,mT=800,mB=760;
+  const {RL,RW,gap}=R,mL=1500,mR=1150,mT=800,mB=920;
   const fs=Math.max(80,Math.min(R.bw*.6,130));
   const svg=$('plan');
   svg.setAttribute('viewBox',`${-mL} ${-mT} ${RL+mL+mR} ${RW+mT+mB}`);
@@ -615,9 +619,9 @@ function renderPlan(p,R){
   h+=`<path class="s-dim" d="M0 ${dy} H${RL} M0 ${dy-70} V${dy+70} M${RL} ${dy-70} V${dy+70}"/>`;
   h+=`<text class="s-t" x="${RL/2}" y="${dy-60}" text-anchor="middle" font-size="150" font-weight="600">${(RL/1000).toFixed(2)} m</text>`;
   h+=`<text class="s-t s-ui s-m" x="${RL/2}" y="-110" text-anchor="middle" font-size="120">BACK WALL (STUD)</text>`;
-  h+=`<text class="s-t s-ui s-m" x="${RL/2}" y="${RW+230}" text-anchor="middle" font-size="120">FRONT WALL (STUD)</text>`;
+  h+=`<text class="s-t s-ui s-m" x="${RL/2}" y="${RW+(showLast?340:230)}" text-anchor="middle" font-size="120">FRONT WALL (STUD)</text>`;
   h+=`<text class="s-t s-ui s-c" x="40" y="-110" font-size="120">◢ START</text>`;
-  const wy=RW+470;
+  const wy=RW+(showLast?570:470);
   h+=`<text class="s-t" x="0" y="${wy}" font-size="125" font-weight="600">Left ${(R.W[0]/1000).toFixed(3)} m</text>`;
   h+=`<text class="s-t" x="${xm}" y="${wy}" text-anchor="middle" font-size="125" font-weight="600">Middle ${(R.W[1]/1000).toFixed(3)} m</text>`;
   h+=`<text class="s-t" x="${RL}" y="${wy}" text-anchor="end" font-size="125" font-weight="600">Right ${(R.W[2]/1000).toFixed(3)} m</text>`;
@@ -629,6 +633,12 @@ function renderPlan(p,R){
     h+=`<text class="s-t s-c s-halo" x="${w1.x0/2}" y="${ly-50}" text-anchor="middle" font-size="130">${(w1.x0/1000).toFixed(2)} m to stair wall</text>`;
     const cx=(w1.x1+w2.x0)/2,cy=(w1.y0+w1.y1)/2;
     h+=`<text class="s-t s-halo" transform="translate(${cx} ${cy}) rotate(-90)" text-anchor="middle" font-size="115"><tspan x="0" dy="-70" font-weight="600">${p.stairFloored?'Stair walls':'Stair & hatch'}</tspan><tspan x="0" dy="150">${(p.stairInner).toFixed(2)} × ${(p.stairDepth).toFixed(2)} m</tspan></text>`;}
+  // last row: rip width against the front wall at every measuring point
+  if(showLast&&R.rows.length>1){const r=R.rows[R.rows.length-1],n=R.XS.length;
+    R.XS.forEach((x,k)=>{const top=r.y,bot=R.yF[k]-gap,xx=Math.min(Math.max(x,260),RL-260),anc=k===0?'start':k===n-1?'end':'middle';
+      const ax=k===0?xx-150:k===n-1?xx+150:xx;
+      h+=`<path class="s-lastln" d="M${ax} ${top} V${bot} M${ax-40} ${top} H${ax+40} M${ax-40} ${bot} H${ax+40}"/>`;
+      h+=`<text class="s-last s-halo" x="${ax}" y="${R.yF[k]+70}" text-anchor="${anc}" dominant-baseline="hanging" font-size="115">${k===0?'Last row ':''}${mm(r.ws[k])}</text>`;});}
   svg.innerHTML=h;HL=null;
   if(rowMode&&selRow!=null&&R.rows[selRow]){const hl=$('hl'),r=R.rows[selRow];hl.setAttribute('y',r.y);hl.setAttribute('height',r.w);hl.setAttribute('visibility','visible');hl.style.stroke='var(--saw)';}
   svg.style.width=(ZOOM*100)+'%';
@@ -645,6 +655,7 @@ function renderTable(R){
     <td>${r.notch?`<span class="chip cut">${r.notch} piece${r.notch>1?'s':''}</span>`:''}</td></tr>`;}).join('');
 }
 
+var showLast=true;try{showLast=localStorage.getItem('show-last')!=='0'}catch(e){}
 var rowMode=false,selRow=null;
 let R=null,HL=null,ZOOM=1;try{ZOOM=Math.min(6,Math.max(1,+localStorage.getItem('loft-zoom')||1));}catch(e){}
 function setZoom(z,cx,cy){z=Math.min(6,Math.max(1,z));const sc=document.querySelector('.planScroll'),svg=$('plan');if(Math.abs(z-ZOOM)<1e-3)return;
@@ -864,6 +875,9 @@ $('lineUp').addEventListener('click',()=>{lastPushT=0;EX.lineRow--;update();});
 $('lineDn').addEventListener('click',()=>{lastPushT=0;EX.lineRow++;update();});
 $('zIn').addEventListener('click',()=>setZoom(ZOOM*1.4));$('zOut').addEventListener('click',()=>setZoom(ZOOM/1.4));
 $('zFit').addEventListener('click',()=>setZoom(1));
+$('lastBtn').setAttribute('aria-pressed',String(showLast));
+$('lastBtn').addEventListener('click',()=>{showLast=!showLast;$('lastBtn').setAttribute('aria-pressed',String(showLast));try{localStorage.setItem('show-last',showLast?'1':'0')}catch(e){}
+  if(R&&!R.empty){const p=read();renderPlan(typeof geo==='function'?geo(p):p,R);}});
 document.querySelector('.planScroll').addEventListener('wheel',e=>{if(!(e.ctrlKey||e.metaKey))return;e.preventDefault();setZoom(ZOOM*Math.exp(-e.deltaY*0.01),e.clientX,e.clientY);},{passive:false});
 $('zLbl').textContent=Math.round(ZOOM*100)+'%';
 let scanStream=null;
