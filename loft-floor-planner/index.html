@@ -96,6 +96,11 @@ main{display:flex;flex-direction:column;gap:18px;min-width:0}
 .tip b{font-family:var(--f-ui);font-size:15px}
 #plan g[data-r]{cursor:pointer}
 .s-st,.s-line,.s-t,.s-room,.s-hl,.s-dim,.s-dimc,.s-chalk{pointer-events:none}
+.s-cut{cursor:text}
+.s-cut rect{fill:var(--panel);stroke:var(--line);stroke-width:6}
+.s-cut.man rect{stroke:var(--saw);stroke-width:9}
+.s-cut:hover rect{stroke:var(--chalk);stroke-width:10}
+.cutEd{position:absolute;z-index:7;box-sizing:border-box;font-family:var(--f-num);font-weight:600;text-align:right;color:var(--saw);border:2px solid var(--chalk);border-radius:6px;background:var(--panel);padding:0 6px;font-size:16px}
 .s-linehit{stroke:transparent;stroke-width:140;pointer-events:none}
 .s-handle{display:none}
 .s-lead{display:none}
@@ -282,7 +287,7 @@ td .w3{color:var(--saw)}
           <button id="centreBtn" type="button">Reset position</button>
           <span id="shiftInfo"></span>
         </div>
-        <div class="planWrap"><div id="tip" class="tip" hidden></div><div class="planScroll"><svg id="plan" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Floor plan with board layout"></svg></div></div>
+        <div class="planWrap"><div id="tip" class="tip" hidden></div><input id="cutEd" class="cutEd" type="number" inputmode="numeric" min="1" step="1" hidden aria-label="Left wall piece (mm)"><div class="planScroll"><svg id="plan" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Floor plan with board layout"></svg></div></div>
       </section>
 
       <section class="card">
@@ -590,7 +595,9 @@ function renderPlan(p,R){
   h+=`<text class="s-t s-m" x="${RL+90}" y="-110" font-size="${fs*.8}">Right end</text>`;
   for(const r of R.rows){const cy=r.cy;
     h+=`<text class="s-t s-m" x="-1270" y="${cy}" dominant-baseline="central" font-size="${fs*.8}">R${r.i+1}</text>`;
-    h+=`<text class="s-t s-c" x="-90" y="${cy}" text-anchor="end" dominant-baseline="central" font-size="${fs}"${r.manual?' style="fill:var(--saw)"':''}>${mm(r.s)}</text>`;
+    {const bw2=fs*3.5,bh=Math.min(fs*1.3,r.w-14);
+    h+=`<g class="s-cut${r.manual?' man':''}" data-cut="${r.i}"><rect x="${-60-bw2}" y="${cy-bh/2}" width="${bw2}" height="${bh}" rx="${bh*.2}"/>`+
+       `<text class="s-t s-c" x="-100" y="${cy}" text-anchor="end" dominant-baseline="central" font-size="${fs}"${r.manual?' style="fill:var(--saw)"':''}>${mm(r.s)}</text></g>`;}
     h+=`<text class="s-t s-m" x="${RL+90}" y="${cy}" dominant-baseline="central" font-size="${fs}">${r.e?mm(r.e):'—'}</text>`;}
   // dimensions + wall names
   const dy=-520;
@@ -697,7 +704,18 @@ function showTip(ev){const g=ev.target.closest&&ev.target.closest('g[data-r]');c
 function hideTip(){$('tip').hidden=true;const hl=$('hl');if(hl)hl.setAttribute('visibility','hidden');document.querySelectorAll('#rows tr.on').forEach(t=>t.classList.remove('on'));}
 $('plan').addEventListener('pointermove',e=>{if(e.pointerType==='mouse'&&!moveMode)showTip(e);});
 $('plan').addEventListener('pointerleave',e=>{if(e.pointerType==='mouse')hideTip();});
-$('plan').addEventListener('click',e=>{if(!moveMode)showTip(e);});
+$('plan').addEventListener('click',e=>{const c=e.target.closest&&e.target.closest('[data-cut]');if(c){openCutEd(+c.dataset.cut,c);return;}if(!moveMode)showTip(e);});
+let cutRow=null;
+function openCutEd(i,g){hideTip();const ed=$('cutEd'),box=g.querySelector('rect').getBoundingClientRect(),w=ed.parentElement.getBoundingClientRect();
+  cutRow=i;ed.value=Math.round(R.rows[i].s);ed.max=R.L;ed.hidden=false;
+  const W=Math.max(box.width,84),H=Math.max(box.height,32);
+  ed.style.left=(box.right-W-w.left)+'px';ed.style.top=(box.top+box.height/2-H/2-w.top)+'px';ed.style.width=W+'px';ed.style.height=H+'px';
+  ed.focus();ed.select();}
+function commitCut(){const ed=$('cutEd');if(cutRow==null||ed.hidden)return;const i=cutRow,v=parseFloat(ed.value);cutRow=null;ed.hidden=true;
+  if(!isFinite(v)||v<=0||Math.round(v)===Math.round(R.rows[i].s))return;
+  lastPushT=0;EX.manual[i]=Math.round(v);update();toast(`Row ${i+1} left piece set to ${mm(v)} mm`);}
+$('cutEd').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();commitCut();}else if(e.key==='Escape'){cutRow=null;$('cutEd').hidden=true;}});
+$('cutEd').addEventListener('blur',commitCut);
 document.addEventListener('click',e=>{if(!e.target.closest('#plan'))hideTip();});
 function syncLine(p,R){const r2=p.lineAt!=='offset';if(locked){const eL=$('offL'),el=$('offR');if(r2)eL.value=Math.round(R.D[0]);if(p.lineDir!=='custom'||r2)el.value=Math.round(R.D[2]);return;}const el=$('offR'),eL=$('offL');eL.disabled=r2;if(r2)eL.value=Math.round(R.D[0]);el.disabled=p.lineDir!=='custom'||r2;if(el.disabled)el.value=Math.round(R.D[2]);}
 function update(){const p=read();R=compute(p);if(R.lineIdx!=null){EX.lineRow=R.lineIdx-R.lineBase;p.lineRow=EX.lineRow;}syncLine(p,R);p.offR=Math.round(R.D[2]);if(p.lineAt!=='offset')p.offL=Math.round(R.D[0]);save(p);queuePush(p);noteHistory(p);renderCallouts(p,R);renderPlan(p,R);renderTable(R);showShift();}
@@ -748,7 +766,7 @@ $('moveBtn').addEventListener('click',()=>{moveMode=!moveMode;$('moveBtn').setAt
 function svgPt(ev){const svg=$('plan'),pt=svg.createSVGPoint();pt.x=ev.clientX;pt.y=ev.clientY;return pt.matrixTransform(svg.getScreenCTM().inverse());}
 function liveRender(){if(dragRAF)return;dragRAF=requestAnimationFrame(()=>{dragRAF=0;const p=read();R=compute(p);renderPlan(p,R);showShift();});}
 const pd=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y),pm=(a,b)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2});
-$('plan').addEventListener('pointerdown',e=>{if(!moveMode)return;e.preventDefault();$('plan').setPointerCapture(e.pointerId);
+$('plan').addEventListener('pointerdown',e=>{if(!moveMode||(e.target.closest&&e.target.closest('[data-cut]')))return;e.preventDefault();$('plan').setPointerCapture(e.pointerId);
   ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
   if(ptrs.size===2){ // second finger: cancel any move and pinch-zoom instead
     if(drag){EX.shiftX=drag.x0;EX.shiftY=drag.y0;drag=null;}if(lineDrag){EX.lineRow=lineDrag.l0;lineDrag=null;}
