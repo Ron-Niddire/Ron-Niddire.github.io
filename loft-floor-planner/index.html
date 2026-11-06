@@ -96,6 +96,14 @@ main{display:flex;flex-direction:column;gap:18px;min-width:0}
 .tip b{font-family:var(--f-ui);font-size:15px}
 #plan g[data-r]{cursor:pointer}
 .s-st,.s-line,.s-t,.s-room,.s-hl,.s-dim,.s-dimc,.s-chalk{pointer-events:none}
+.s-linehit{stroke:transparent;stroke-width:140;pointer-events:none}
+.s-handle{display:none}
+.s-handle rect{fill:var(--chalk)} .s-handle path{fill:#fff}
+#plan.moving .s-linehit{pointer-events:stroke;cursor:ns-resize}
+#plan.moving .s-handle{display:inline;cursor:ns-resize}
+.zoomCtl{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--muted);font-family:var(--f-num)}
+.zoomCtl button{min-width:36px;padding:5px 8px;font-size:16px;line-height:1}
+#zLbl{min-width:44px;text-align:center}
 #plan{display:block;width:100%;min-width:960px;height:auto}
 .tscroll{overflow-x:auto;margin-top:10px}
 table{border-collapse:collapse;width:100%;font-size:14px}
@@ -261,14 +269,14 @@ td .w3{color:var(--saw)}
             <span><i class="sw" style="background:var(--wall);border:1px solid var(--ink)"></i>Stair walls</span>
             <span><i class="sw" style="border-top:3px dashed var(--chalk);height:0"></i>Chalk line</span>
           </div>
-          <label class="zoom" for="zoom">Zoom
-            <select id="zoom"><option value="1">Fit</option><option value="1.5">150%</option><option value="2">200%</option><option value="3">300%</option></select></label>
+          <span class="zoomCtl" role="group" aria-label="Zoom"><button id="zOut" type="button" aria-label="Zoom out">−</button><span id="zLbl">100%</span><button id="zIn" type="button" aria-label="Zoom in">+</button><button id="zFit" type="button">Fit</button></span>
         </div>
         <div class="tools">
           <button id="moveBtn" type="button" aria-pressed="false">✋ Move floor</button>
           <button id="undoBtn" type="button" disabled>↶ Undo</button>
           <button id="redoBtn" type="button" disabled>↷ Redo</button>
           <span class="nudge" role="group" aria-label="Nudge the floor 10 mm"><button type="button" data-nx="-10" aria-label="Left 10 mm">←</button><button type="button" data-nx="10" aria-label="Right 10 mm">→</button><button type="button" data-ny="-10" aria-label="Up 10 mm">↑</button><button type="button" data-ny="10" aria-label="Down 10 mm">↓</button></span>
+          <span class="nudge" role="group" aria-label="Move the chalk line a row"><button type="button" id="lineUp">Line ↑</button><button type="button" id="lineDn">Line ↓</button></span>
           <button id="centreBtn" type="button">Reset position</button>
           <span id="shiftInfo"></span>
         </div>
@@ -301,8 +309,8 @@ td .w3{color:var(--saw)}
 
 <script>
 const F=['roomL','gap','wL','wM','wMidX','wR','lineAt','offL','lineDir','offR','offMid','boardL','boardW','perPack','kerf','mode','minPiece','minStagger','rip','minRow','stairOn','stairSide','stairX','stairT','stairInner','stairDepth','stairFloored','spare','rollM2'];
-const EXK=['shiftX','shiftY','manual'];
-const DEF={shiftX:0,shiftY:0,manual:{},roomL:11.441,gap:10,wL:4.275,wM:4.339,wMidX:5.9,wR:4.311,lineAt:'stair',offL:1000,lineDir:'split',offR:1000,offMid:null,
+const EXK=['shiftX','shiftY','manual','lineRow'];
+const DEF={shiftX:0,shiftY:0,manual:{},lineRow:0,roomL:11.441,gap:10,wL:4.275,wM:4.339,wMidX:5.9,wR:4.311,lineAt:'stair',offL:1000,lineDir:'split',offR:1000,offMid:null,
   boardL:1285,boardW:192,perPack:8,kerf:3,mode:'offcut',minPiece:300,minStagger:300,rip:'auto',minRow:60,
   stairOn:true,stairSide:'front',stairX:3.722,stairT:80,stairInner:0.821,stairDepth:2.294,stairFloored:true,spare:5,rollM2:15};
 const NULLABLE=new Set(['offMid']);
@@ -310,14 +318,14 @@ const KEY='loft-floor-planner-v2',LKEY='loft-floor-planner-lock';
 const $=id=>document.getElementById(id);
 
 const KEYS=[...F,...EXK];
-let EX={shiftX:0,shiftY:0,manual:{}};
+let EX={shiftX:0,shiftY:0,manual:{},lineRow:0};
 const FORCE={v:3,vals:{roomL:11.441,boardL:1285}};
 function load(){let s={};try{s=JSON.parse(localStorage.getItem(KEY)||'{}')||{}}catch(e){}
   if((s._v||0)<FORCE.v){Object.assign(s,FORCE.vals);s._v=FORCE.v;try{localStorage.setItem(KEY,JSON.stringify(s))}catch(e){}}
   if(s.roomW!=null&&s.wL==null){s.wL=s.wM=s.wR=s.roomW;}
   return {...DEF,...s};}
 function save(p){try{localStorage.setItem(KEY,JSON.stringify({...p,_v:FORCE.v}))}catch(e){}}
-function fill(p){EX={shiftX:+p.shiftX||0,shiftY:+p.shiftY||0,manual:{...(p.manual||{})}};for(const k of F){const el=$(k);if(el.type==='checkbox')el.checked=!!p[k];else el.value=p[k]==null?'':p[k];}}
+function fill(p){EX={shiftX:+p.shiftX||0,shiftY:+p.shiftY||0,manual:{...(p.manual||{})},lineRow:Math.round(+p.lineRow||0)};for(const k of F){const el=$(k);if(el.type==='checkbox')el.checked=!!p[k];else el.value=p[k]==null?'':p[k];}}
 function read(){const p={};for(const k of F){const el=$(k);
   if(el.type==='checkbox')p[k]=el.checked;else if(el.tagName==='SELECT')p[k]=el.value;
   else if(NULLABLE.has(k)&&el.value.trim()==='')p[k]=null;
@@ -328,20 +336,22 @@ function read(){const p={};for(const k of F){const el=$(k);
   p.gap=Math.max(0,p.gap);p.kerf=Math.max(0,p.kerf);p.perPack=Math.max(1,Math.round(p.perPack));
   p.minPiece=Math.max(50,Math.min(p.minPiece,p.boardL));p.minStagger=Math.max(0,Math.min(p.minStagger,p.boardL/2));
   p.minRow=Math.max(10,p.minRow);p.rollM2=Math.max(1,p.rollM2);p.spare=Math.max(0,p.spare);
-  p.shiftX=EX.shiftX;p.shiftY=EX.shiftY;p.manual={...EX.manual};
+  p.shiftX=EX.shiftX;p.shiftY=EX.shiftY;p.manual={...EX.manual};p.lineRow=EX.lineRow;
   return p;}
 
-function compute(p){
-  if(p.lineAt==='offset')return compute0(p);
-  // line sits on the row 1 / row 2 joint: iterate so a measured middle offset stays relative to that line
-  let q={...p},R=compute0(q);
+// the chalk line always sits on a board joint: lineRow steps it from its home joint
+function pinLine(R,base,lr){const idx=Math.min(Math.max(base+lr,0),R.bounds.length-1),b=R.bounds[idx];
+  R.Yline=b;R.D=R.yF.map(y=>y-b);R.backDist=R.yB.map(y=>b-y);R.joint=null;R.atRow2=true;R.lineIdx=idx;R.lineBase=base;return R;}
+function compute(p){const lr=Math.round(p.lineRow||0);
+  if(p.lineAt==='offset'){const R=compute0(p);if(!R.bounds.length)return R;
+    let base=0,bd=Infinity;R.bounds.forEach((b,i)=>{const d=Math.abs(b-R.Yline);if(d<bd){bd=d;base=i;}});return pinLine(R,base,lr);}
+  // iterate so a measured middle offset stays relative to the line
+  let q={...p},R=compute0(q);const at=R=>R.bounds[Math.min(Math.max(lr,0),R.bounds.length-1)];
   for(let k=0;k<6&&R.bounds.length;k++){
-    const fL=R.yF[0]-R.bounds[0];if(Math.abs(fL-q.offL)<0.5)break;
+    const fL=R.yF[0]-at(R);if(Math.abs(fL-q.offL)<0.5)break;
     q={...q,offR:q.offR+(fL-q.offL),offL:fL};R=compute0(q);}
   if(!R.bounds.length)return R;
-  const b1=R.bounds[0];
-  R.Yline=b1;R.D=R.yF.map(y=>y-b1);R.backDist=R.yB.map(y=>b1-y);R.joint=null;R.atRow2=true;
-  return R;
+  return pinLine(R,0,lr);
 }
 function compute0(p){
   const L=p.boardL,bw=p.boardW,gap=p.gap,kerf=p.kerf,minP=p.minPiece;
@@ -492,9 +502,10 @@ function renderCallouts(p,R){
     if(mx-mn>2)return `Scribe to the ${wall} wall: it tapers ${mm(mx-mn)} mm along the room. Left / middle / right shown.`;
     return mn<p.minRow?'Narrower than your limit. Set "Rip first row" to balance it.':`Same width the full length.`;};
   const j=R.joint;
-  const lineCard=R.atRow2?{k:'Chalk line off back wall',chip:['info','Start of row 2'],
+  const LI=(R.lineIdx??0);
+  const lineCard=R.atRow2?{k:'Chalk line off back wall',chip:['info',`Start of row ${LI+2}`],
      v:`${mm(R.backDist[0])} / ${mm(R.backDist[2])} mm`,
-     d:`Mark this far off the back wall at the left and right gables (${mm(R.backDist[1])} mm in the middle), then snap the line. It's the front edge of row 1, so row 2 sits on it. These distances include the ${mm(p.gap)} mm expansion gap.`}
+     d:`Mark this far off the back wall at the left and right gables (${mm(R.backDist[1])} mm in the middle), then snap the line. It's the front edge of row ${LI+1}, so row ${LI+2} starts on it. These distances include the ${mm(p.gap)} mm expansion gap.`}
     :{k:'Chalk line',chip:['info',{split:'Split',front:'∥ front',back:'∥ back',custom:'Custom'}[p.lineDir]],
      v:`${mm(R.D[0])} / ${mm(R.D[2])} mm`,
      d:`From the front wall at the left and right gables. Back wall to the line is ${mm(R.backDist[0])} mm at the left and ${mm(R.backDist[2])} mm at the right.`+
@@ -562,6 +573,8 @@ function renderPlan(p,R){
   // chalk line
   const Y=R.Yline;
   h+=`<line class="s-line" x1="-60" y1="${Y}" x2="${RL+60}" y2="${Y}"/>`;
+  h+=`<line class="s-linehit" data-line="1" x1="-260" y1="${Y}" x2="${RL+60}" y2="${Y}"/>`;
+  h+=`<g class="s-handle" data-line="1" transform="translate(-170 ${Y})"><rect x="-80" y="-80" width="160" height="160" rx="40"/><path d="M0 -52 L28 -16 H-28 Z M0 52 L28 16 H-28 Z"/></g>`;
   h+=`<text class="s-t s-c s-halo" x="${RL*0.32}" y="${Y-50}" text-anchor="middle" font-size="110">CHALK LINE</text>`;
   const tag=(x,anchor,i)=>`<text class="s-t s-c s-halo" x="${x}" y="${Y-50}" text-anchor="${anchor}" font-size="105">↑ ${mm(R.backDist[i])} to back</text>
     <text class="s-t s-c s-halo" x="${x}" y="${Y+140}" text-anchor="${anchor}" font-size="105">↓ ${mm(R.D[i])} to front</text>`;
@@ -596,7 +609,7 @@ function renderPlan(p,R){
     const cx=(w1.x1+w2.x0)/2,cy=(w1.y0+w1.y1)/2;
     h+=`<text class="s-t s-halo" transform="translate(${cx} ${cy}) rotate(-90)" text-anchor="middle" font-size="115"><tspan x="0" dy="-70" font-weight="600">${p.stairFloored?'Stair walls':'Stair & hatch'}</tspan><tspan x="0" dy="150">${(p.stairInner).toFixed(2)} × ${(p.stairDepth).toFixed(2)} m</tspan></text>`;}
   svg.innerHTML=h;HL=null;
-  svg.style.width=(parseFloat($('zoom').value)*100)+'%';
+  svg.style.width=(ZOOM*100)+'%';
 }
 
 function renderTable(R){
@@ -610,7 +623,13 @@ function renderTable(R){
     <td>${r.notch?`<span class="chip cut">${r.notch} piece${r.notch>1?'s':''}</span>`:''}</td></tr>`;}).join('');
 }
 
-let R=null,HL=null;
+let R=null,HL=null,ZOOM=1;try{ZOOM=Math.min(6,Math.max(1,+localStorage.getItem('loft-zoom')||1));}catch(e){}
+function setZoom(z,cx,cy){z=Math.min(6,Math.max(1,z));const sc=document.querySelector('.planScroll'),svg=$('plan');if(Math.abs(z-ZOOM)<1e-3)return;
+  const r=svg.getBoundingClientRect(),sr=sc.getBoundingClientRect();
+  if(cx==null){cx=sr.left+sr.width/2;cy=Math.max(r.top,0)+Math.min(r.bottom,innerHeight)/2-Math.max(r.top,0)/2;}
+  const fx=(cx-r.left)/r.width,fy=(cy-r.top)/r.height;ZOOM=z;svg.style.width=(z*100)+'%';
+  const r2=svg.getBoundingClientRect();sc.scrollLeft+=(r2.left+fx*r2.width)-cx;window.scrollBy(0,(r2.top+fy*r2.height)-cy);
+  $('zLbl').textContent=Math.round(z*100)+'%';try{localStorage.setItem('loft-zoom',String(z))}catch(e){}}
 // ---- undo / redo ----
 let hist=[],fut=[],lastSnap=null,lastPushT=0,restoring=false;
 function noteHistory(p){const cur=norm(p);if(lastSnap==null){lastSnap=cur;return;}if(cur===lastSnap)return;
@@ -678,12 +697,12 @@ $('plan').addEventListener('pointerleave',e=>{if(e.pointerType==='mouse')hideTip
 $('plan').addEventListener('click',e=>{if(!moveMode)showTip(e);});
 document.addEventListener('click',e=>{if(!e.target.closest('#plan'))hideTip();});
 function syncLine(p,R){const r2=p.lineAt!=='offset';if(locked){const eL=$('offL'),el=$('offR');if(r2)eL.value=Math.round(R.D[0]);if(p.lineDir!=='custom'||r2)el.value=Math.round(R.D[2]);return;}const el=$('offR'),eL=$('offL');eL.disabled=r2;if(r2)eL.value=Math.round(R.D[0]);el.disabled=p.lineDir!=='custom'||r2;if(el.disabled)el.value=Math.round(R.D[2]);}
-function update(){const p=read();R=compute(p);syncLine(p,R);p.offR=Math.round(R.D[2]);if(p.lineAt!=='offset')p.offL=Math.round(R.D[0]);save(p);queuePush(p);noteHistory(p);renderCallouts(p,R);renderPlan(p,R);renderTable(R);showShift();}
+function update(){const p=read();R=compute(p);if(R.lineIdx!=null){EX.lineRow=R.lineIdx-R.lineBase;p.lineRow=EX.lineRow;}syncLine(p,R);p.offR=Math.round(R.D[2]);if(p.lineAt!=='offset')p.offL=Math.round(R.D[0]);save(p);queuePush(p);noteHistory(p);renderCallouts(p,R);renderPlan(p,R);renderTable(R);showShift();}
 $('rows').addEventListener('mouseover',e=>{const tr=e.target.closest('tr');const hl=$('hl');if(!tr||!hl||!R)return;
   const r=R.rows[+tr.dataset.r];hl.setAttribute('y',r.y);hl.setAttribute('height',r.w);hl.setAttribute('visibility','visible');});
 $('rows').addEventListener('mouseleave',()=>{const hl=$('hl');if(hl)hl.setAttribute('visibility','hidden');});
 for(const k of F){$(k).addEventListener('input',update);$(k).addEventListener('change',update);}
-$('zoom').addEventListener('change',()=>{$('plan').style.width=(parseFloat($('zoom').value)*100)+'%';});
+
 $('reset').addEventListener('click',()=>{fill(DEF);update();});
 let locked=true;try{locked=localStorage.getItem(LKEY)!=='0';}catch(e){}
 function applyLock(){for(const k of F)$(k).disabled=locked;$('reset').disabled=locked;
@@ -720,19 +739,40 @@ $('centreBtn').addEventListener('click',()=>{if(!EX.shiftX&&!EX.shiftY)return;EX
 $('rows').addEventListener('change',e=>{const inp=e.target.closest('.cutIn');if(!inp)return;const v=parseFloat(inp.value);const i=+inp.dataset.r;
   lastPushT=0;if(!isFinite(v)||v<=0)delete EX.manual[i];else EX.manual[i]=Math.round(v);update();toast(`Row ${i+1} left piece set to ${mm(EX.manual[i]??R.rows[i].s)} mm`);});
 $('rows').addEventListener('click',e=>{const b=e.target.closest('[data-clr]');if(!b)return;lastPushT=0;delete EX.manual[+b.dataset.clr];update();});
-let moveMode=false,drag=null,dragRAF=0;
+let moveMode=false,drag=null,lineDrag=null,pinch=null,dragRAF=0;const ptrs=new Map();
 $('moveBtn').addEventListener('click',()=>{moveMode=!moveMode;$('moveBtn').setAttribute('aria-pressed',String(moveMode));$('plan').classList.toggle('moving',moveMode);
-  $('moveBtn').textContent=moveMode?'✋ Moving: drag the floor':'✋ Move floor';hideTip();});
+  $('moveBtn').textContent=moveMode?'✋ Moving: drag floor or line':'✋ Move floor';hideTip();});
 function svgPt(ev){const svg=$('plan'),pt=svg.createSVGPoint();pt.x=ev.clientX;pt.y=ev.clientY;return pt.matrixTransform(svg.getScreenCTM().inverse());}
+function liveRender(){if(dragRAF)return;dragRAF=requestAnimationFrame(()=>{dragRAF=0;const p=read();R=compute(p);renderPlan(p,R);showShift();});}
+const pd=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y),pm=(a,b)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2});
 $('plan').addEventListener('pointerdown',e=>{if(!moveMode)return;e.preventDefault();$('plan').setPointerCapture(e.pointerId);
-  drag={id:e.pointerId,p0:svgPt(e),x0:EX.shiftX,y0:EX.shiftY,moved:false};$('plan').classList.add('dragging');lastPushT=0;});
-$('plan').addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.id)return;const q=svgPt(e);
-  EX.shiftX=Math.round(drag.x0+q.x-drag.p0.x);EX.shiftY=Math.round(drag.y0+q.y-drag.p0.y);drag.moved=true;
-  if(!dragRAF)dragRAF=requestAnimationFrame(()=>{dragRAF=0;const p=read();R=compute(p);renderPlan(p,R);showShift();});});
-const endDrag=e=>{if(!drag||e.pointerId!==drag.id)return;const L=R.L;EX.shiftX=((EX.shiftX%L)+L)%L;if(EX.shiftX>L/2)EX.shiftX-=L;
-  const bw=R.bw;EX.shiftY=((EX.shiftY%bw)+bw)%bw;if(EX.shiftY>bw/2)EX.shiftY-=bw;
-  drag=null;$('plan').classList.remove('dragging');cancelAnimationFrame(dragRAF);dragRAF=0;update();};
-$('plan').addEventListener('pointerup',endDrag);$('plan').addEventListener('pointercancel',endDrag);
+  ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(ptrs.size===2){ // second finger: cancel any move and pinch-zoom instead
+    if(drag){EX.shiftX=drag.x0;EX.shiftY=drag.y0;drag=null;}if(lineDrag){EX.lineRow=lineDrag.l0;lineDrag=null;}
+    const [p1,p2]=[...ptrs.values()];pinch={d0:pd(p1,p2),z0:ZOOM,mid:pm(p1,p2)};$('plan').classList.remove('dragging');liveRender();return;}
+  if(ptrs.size>2)return;lastPushT=0;
+  if(e.target.closest('[data-line]'))lineDrag={id:e.pointerId,l0:EX.lineRow};
+  else drag={id:e.pointerId,p0:svgPt(e),x0:EX.shiftX,y0:EX.shiftY};
+  $('plan').classList.add('dragging');});
+$('plan').addEventListener('pointermove',e=>{if(!ptrs.has(e.pointerId))return;ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pinch&&ptrs.size>=2){const [p1,p2]=[...ptrs.values()],m=pm(p1,p2);setZoom(pinch.z0*pd(p1,p2)/pinch.d0,m.x,m.y);
+    document.querySelector('.planScroll').scrollLeft-=m.x-pinch.mid.x;window.scrollBy(0,-(m.y-pinch.mid.y));pinch.mid=m;return;}
+  if(lineDrag&&e.pointerId===lineDrag.id){const y=svgPt(e).y;if(!R||!R.bounds.length)return;let bi=0,bd=Infinity;
+    R.bounds.forEach((b,i)=>{const d=Math.abs(b-y);if(d<bd){bd=d;bi=i;}});const nl=bi-(R.lineBase||0);if(nl!==EX.lineRow){EX.lineRow=nl;liveRender();}return;}
+  if(drag&&e.pointerId===drag.id){const q=svgPt(e);EX.shiftX=Math.round(drag.x0+q.x-drag.p0.x);EX.shiftY=Math.round(drag.y0+q.y-drag.p0.y);liveRender();}});
+const endPtr=e=>{if(!ptrs.has(e.pointerId))return;ptrs.delete(e.pointerId);
+  if(pinch){if(ptrs.size<2)pinch=null;if(!ptrs.size)$('plan').classList.remove('dragging');return;}
+  if(drag&&e.pointerId===drag.id){const L=R.L,bw=R.bw;EX.shiftX=((EX.shiftX%L)+L)%L;if(EX.shiftX>L/2)EX.shiftX-=L;
+    EX.shiftY=((EX.shiftY%bw)+bw)%bw;if(EX.shiftY>bw/2)EX.shiftY-=bw;drag=null;}
+  if(lineDrag&&e.pointerId===lineDrag.id)lineDrag=null;
+  $('plan').classList.remove('dragging');cancelAnimationFrame(dragRAF);dragRAF=0;update();};
+$('plan').addEventListener('pointerup',endPtr);$('plan').addEventListener('pointercancel',endPtr);
+$('lineUp').addEventListener('click',()=>{lastPushT=0;EX.lineRow--;update();});
+$('lineDn').addEventListener('click',()=>{lastPushT=0;EX.lineRow++;update();});
+$('zIn').addEventListener('click',()=>setZoom(ZOOM*1.4));$('zOut').addEventListener('click',()=>setZoom(ZOOM/1.4));
+$('zFit').addEventListener('click',()=>setZoom(1));
+document.querySelector('.planScroll').addEventListener('wheel',e=>{if(!(e.ctrlKey||e.metaKey))return;e.preventDefault();setZoom(ZOOM*Math.exp(-e.deltaY*0.01),e.clientX,e.clientY);},{passive:false});
+$('zLbl').textContent=Math.round(ZOOM*100)+'%';
 let scanStream=null;
 function stopScan(){if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null;}$('scanBox').hidden=true;}
 if(typeof jsQR!=='function'||!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia))$('scanRow').hidden=true;
