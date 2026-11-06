@@ -129,6 +129,7 @@ tbody tr:hover,tbody tr.on{background:var(--hover)}
 .tools button{padding:7px 12px}
 .nudge{display:inline-flex;gap:4px}
 .nudge button{min-width:40px;font-family:var(--f-num)}
+#rowBtn[aria-pressed="true"]{background:var(--saw);color:#fff;border-color:var(--saw)}
 #moveBtn[aria-pressed="true"]{background:var(--chalk);color:#fff;border-color:var(--chalk)}
 #shiftInfo{font-size:13px;color:var(--muted);font-family:var(--f-num)}
 #plan.moving{touch-action:none;cursor:grab}
@@ -280,6 +281,7 @@ td .w3{color:var(--saw)}
         </div>
         <div class="tools">
           <button id="moveBtn" type="button" aria-pressed="false">✋ Move floor</button>
+          <button id="rowBtn" type="button" aria-pressed="false">↔ Move one row</button>
           <button id="undoBtn" type="button" disabled>↶ Undo</button>
           <button id="redoBtn" type="button" disabled>↷ Redo</button>
           <span class="nudge" role="group" aria-label="Nudge the floor 10 mm"><button type="button" data-nx="-10" aria-label="Left 10 mm">←</button><button type="button" data-nx="10" aria-label="Right 10 mm">→</button><button type="button" data-ny="-10" aria-label="Up 10 mm">↑</button><button type="button" data-ny="10" aria-label="Down 10 mm">↓</button></span>
@@ -619,6 +621,7 @@ function renderPlan(p,R){
     const cx=(w1.x1+w2.x0)/2,cy=(w1.y0+w1.y1)/2;
     h+=`<text class="s-t s-halo" transform="translate(${cx} ${cy}) rotate(-90)" text-anchor="middle" font-size="115"><tspan x="0" dy="-70" font-weight="600">${p.stairFloored?'Stair walls':'Stair & hatch'}</tspan><tspan x="0" dy="150">${(p.stairInner).toFixed(2)} × ${(p.stairDepth).toFixed(2)} m</tspan></text>`;}
   svg.innerHTML=h;HL=null;
+  if(rowMode&&selRow!=null&&R.rows[selRow]){const hl=$('hl'),r=R.rows[selRow];hl.setAttribute('y',r.y);hl.setAttribute('height',r.w);hl.setAttribute('visibility','visible');hl.style.stroke='var(--saw)';}
   svg.style.width=(ZOOM*100)+'%';
 }
 
@@ -633,6 +636,7 @@ function renderTable(R){
     <td>${r.notch?`<span class="chip cut">${r.notch} piece${r.notch>1?'s':''}</span>`:''}</td></tr>`;}).join('');
 }
 
+var rowMode=false,selRow=null;
 let R=null,HL=null,ZOOM=1;try{ZOOM=Math.min(6,Math.max(1,+localStorage.getItem('loft-zoom')||1));}catch(e){}
 function setZoom(z,cx,cy){z=Math.min(6,Math.max(1,z));const sc=document.querySelector('.planScroll'),svg=$('plan');if(Math.abs(z-ZOOM)<1e-3)return;
   const r=svg.getBoundingClientRect(),sr=sc.getBoundingClientRect();
@@ -650,6 +654,7 @@ function restore(js){restoring=true;fill(JSON.parse(js));update();restoring=fals
 function undo(){if(!hist.length)return;fut.push(lastSnap);restore(hist.pop());toast('Undone');}
 function redo(){if(!fut.length)return;hist.push(lastSnap);restore(fut.pop());toast('Redone');}
 function showShift(){const L=R?R.L:1285,x=((EX.shiftX%L)+L)%L,y=EX.shiftY;const parts=[];
+  if(rowMode){$('shiftInfo').textContent=selRow!=null&&R&&R.rows[selRow]?`Row ${selRow+1} selected · left piece ${mm(R.rows[selRow].s)} mm · drag it or use ← →`:'Tap or drag a row to move it';return;}
   if(x)parts.push(`${mm(x)} mm right`);if(Math.round(y))parts.push(`${mm(Math.abs(y))} mm ${y>0?'down':'up'}`);
   const m=Object.keys(EX.manual).length;if(m)parts.push(`${m} row${m>1?'s':''} set by you`);
   $('shiftInfo').textContent=parts.length?'Moved: '+parts.join(' · '):'';}
@@ -754,30 +759,42 @@ function loadFromBox(){const o=parseSettings($('recvLink').value);if(!o){$('recv
 $('loadBtn').addEventListener('click',loadFromBox);
 $('undoBtn').addEventListener('click',undo);$('redoBtn').addEventListener('click',redo);
 document.addEventListener('keydown',e=>{if(!(e.metaKey||e.ctrlKey)||e.key.toLowerCase()!=='z')return;const t=e.target;if(t&&/INPUT|SELECT|TEXTAREA/.test(t.tagName))return;e.preventDefault();e.shiftKey?redo():undo();});
+const wrapL=v=>{const L=R.L;let w=((Math.round(v)%L)+L)%L;return w<1?L:w;};
 document.querySelectorAll('[data-nx],[data-ny]').forEach(b=>b.addEventListener('click',()=>{if(Date.now()-lastPushT>1200)lastPushT=0;
+  if(rowMode){if(selRow==null||!b.dataset.nx){toast(selRow==null?'Tap a row first':'Up and down move the whole floor');return;}
+    EX.manual[selRow]=wrapL(R.rows[selRow].s+(+b.dataset.nx));update();return;}
   EX.shiftX+=+(b.dataset.nx||0);EX.shiftY+=+(b.dataset.ny||0);update();}));
 $('centreBtn').addEventListener('click',()=>{if(!EX.shiftX&&!EX.shiftY)return;EX.shiftX=0;EX.shiftY=0;lastPushT=0;update();});
 $('rows').addEventListener('change',e=>{const inp=e.target.closest('.cutIn');if(!inp)return;const v=parseFloat(inp.value);const i=+inp.dataset.r;
   lastPushT=0;if(!isFinite(v)||v<=0)delete EX.manual[i];else EX.manual[i]=Math.round(v);update();toast(`Row ${i+1} left piece set to ${mm(EX.manual[i]??R.rows[i].s)} mm`);});
 $('rows').addEventListener('click',e=>{const b=e.target.closest('[data-clr]');if(!b)return;lastPushT=0;delete EX.manual[+b.dataset.clr];update();});
-let moveMode=false,drag=null,lineDrag=null,pinch=null,dragRAF=0;const ptrs=new Map();
-$('moveBtn').addEventListener('click',()=>{moveMode=!moveMode;$('moveBtn').setAttribute('aria-pressed',String(moveMode));$('plan').classList.toggle('moving',moveMode);
-  $('moveBtn').textContent=moveMode?'✋ Moving: drag floor or line':'✋ Move floor';hideTip();});
+let moveMode=false,drag=null,lineDrag=null,rowDrag=null,pinch=null,dragRAF=0;const ptrs=new Map();
+function setModes(m,r){moveMode=m||r;rowMode=r;$('moveBtn').setAttribute('aria-pressed',String(m&&!r));$('rowBtn').setAttribute('aria-pressed',String(r));
+  $('plan').classList.toggle('moving',moveMode);$('moveBtn').textContent=m&&!r?'✋ Moving: drag floor or line':'✋ Move floor';
+  $('rowBtn').textContent=r?'↔ Moving one row':'↔ Move one row';if(!r)selRow=null;hideTip();const p=read();renderPlan(p,R);showShift();}
+$('moveBtn').addEventListener('click',()=>setModes(!(moveMode&&!rowMode),false));
+$('rowBtn').addEventListener('click',()=>setModes(false,!rowMode));
+function rowAt(e){const g=e.target.closest&&e.target.closest('g[data-r]');if(g)return +g.dataset.r;const y=svgPt(e).y;
+  const r=R.rows.find(r=>y>=r.y&&y<r.y+r.w);return r?r.i:null;}
 function svgPt(ev){const svg=$('plan'),pt=svg.createSVGPoint();pt.x=ev.clientX;pt.y=ev.clientY;return pt.matrixTransform(svg.getScreenCTM().inverse());}
 function liveRender(){if(dragRAF)return;dragRAF=requestAnimationFrame(()=>{dragRAF=0;const p=read();R=compute(p);renderPlan(p,R);showShift();});}
 const pd=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y),pm=(a,b)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2});
 $('plan').addEventListener('pointerdown',e=>{if(!moveMode||(e.target.closest&&e.target.closest('[data-cut]')))return;e.preventDefault();$('plan').setPointerCapture(e.pointerId);
   ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
   if(ptrs.size===2){ // second finger: cancel any move and pinch-zoom instead
-    if(drag){EX.shiftX=drag.x0;EX.shiftY=drag.y0;drag=null;}if(lineDrag){EX.lineRow=lineDrag.l0;lineDrag=null;}
+    if(drag){EX.shiftX=drag.x0;EX.shiftY=drag.y0;drag=null;}if(rowDrag){if(rowDrag.had==null)delete EX.manual[rowDrag.i];else EX.manual[rowDrag.i]=rowDrag.had;rowDrag=null;}if(lineDrag){EX.lineRow=lineDrag.l0;lineDrag=null;}
     const [p1,p2]=[...ptrs.values()];pinch={d0:pd(p1,p2),z0:ZOOM,mid:pm(p1,p2)};$('plan').classList.remove('dragging');liveRender();return;}
   if(ptrs.size>2)return;lastPushT=0;
   if(e.target.closest('[data-line]'))lineDrag={id:e.pointerId,l0:EX.lineRow};
+  else if(rowMode){const i=rowAt(e);if(i==null){$('plan').classList.remove('dragging');return;}selRow=i;
+    rowDrag={id:e.pointerId,i,s0:R.rows[i].s,p0:svgPt(e),had:EX.manual[i]};liveRender();}
   else drag={id:e.pointerId,p0:svgPt(e),x0:EX.shiftX,y0:EX.shiftY};
   $('plan').classList.add('dragging');});
 $('plan').addEventListener('pointermove',e=>{if(!ptrs.has(e.pointerId))return;ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
   if(pinch&&ptrs.size>=2){const [p1,p2]=[...ptrs.values()],m=pm(p1,p2);setZoom(pinch.z0*pd(p1,p2)/pinch.d0,m.x,m.y);
     document.querySelector('.planScroll').scrollLeft-=m.x-pinch.mid.x;window.scrollBy(0,-(m.y-pinch.mid.y));pinch.mid=m;return;}
+  if(rowDrag&&e.pointerId===rowDrag.id){const dx=svgPt(e).x-rowDrag.p0.x;if(Math.abs(dx)<3&&EX.manual[rowDrag.i]==null)return;
+    EX.manual[rowDrag.i]=wrapL(rowDrag.s0+dx);liveRender();return;}
   if(lineDrag&&e.pointerId===lineDrag.id){const y=svgPt(e).y;if(!R||!R.bounds.length)return;let bi=0,bd=Infinity;
     R.bounds.forEach((b,i)=>{const d=Math.abs(b-y);if(d<bd){bd=d;bi=i;}});const nl=bi-(R.lineBase||0);if(nl!==EX.lineRow){EX.lineRow=nl;liveRender();}return;}
   if(drag&&e.pointerId===drag.id){const q=svgPt(e);EX.shiftX=Math.round(drag.x0+q.x-drag.p0.x);EX.shiftY=Math.round(drag.y0+q.y-drag.p0.y);liveRender();}});
@@ -786,6 +803,7 @@ const endPtr=e=>{if(!ptrs.has(e.pointerId))return;ptrs.delete(e.pointerId);
   if(drag&&e.pointerId===drag.id){const L=R.L,bw=R.bw;EX.shiftX=((EX.shiftX%L)+L)%L;if(EX.shiftX>L/2)EX.shiftX-=L;
     EX.shiftY=((EX.shiftY%bw)+bw)%bw;if(EX.shiftY>bw/2)EX.shiftY-=bw;drag=null;}
   if(lineDrag&&e.pointerId===lineDrag.id)lineDrag=null;
+  if(rowDrag&&e.pointerId===rowDrag.id)rowDrag=null;
   $('plan').classList.remove('dragging');cancelAnimationFrame(dragRAF);dragRAF=0;update();};
 $('plan').addEventListener('pointerup',endPtr);$('plan').addEventListener('pointercancel',endPtr);
 $('lineUp').addEventListener('click',()=>{lastPushT=0;EX.lineRow--;update();});
