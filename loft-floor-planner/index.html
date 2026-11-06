@@ -129,6 +129,13 @@ tbody tr:hover,tbody tr.on{background:var(--hover)}
 .tools button{padding:7px 12px}
 .nudge{display:inline-flex;gap:4px}
 .nudge button{min-width:40px;font-family:var(--f-num)}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0}
+.tab{font-weight:700;font-size:15px;padding:7px 14px;border-radius:8px 8px 0 0;border:1px solid var(--line);border-bottom-width:3px;background:var(--bg);color:var(--muted)}
+.tab[aria-selected="true"]{background:var(--panel);color:var(--ink);border-bottom-color:var(--chalk)}
+.tabAct{font-size:13px;padding:6px 10px}
+.tabAdd{color:var(--chalk);border-style:dashed}
+.tabDel.arm{background:var(--saw);color:#fff;border-color:var(--saw)}
+.tabName{font:inherit;font-weight:700;font-size:15px;padding:6px 10px;border:2px solid var(--chalk);border-radius:8px;width:12em;max-width:60vw;background:var(--panel);color:var(--ink)}
 #rowBtn[aria-pressed="true"]{background:var(--saw);color:#fff;border-color:var(--saw)}
 #moveBtn[aria-pressed="true"]{background:var(--chalk);color:#fff;border-color:var(--chalk)}
 #shiftInfo{font-size:13px;color:var(--muted);font-family:var(--f-num)}
@@ -270,7 +277,7 @@ td .w3{color:var(--saw)}
 
       <section class="card">
         <div class="bar">
-          <h2>Floor plan</h2>
+          <div class="tabs" id="tabs" role="tablist" aria-label="Floor plans"></div>
           <div class="legend">
             <span><i class="sw" style="background:#e2c9a0;border:1.5px solid #6c5539"></i>Light oak board</span>
             <span><i class="sw" style="background:var(--chalk)"></i>Cut at left wall</span>
@@ -659,24 +666,64 @@ function showShift(){const L=R?R.L:1285,x=((EX.shiftX%L)+L)%L,y=EX.shiftY;const 
   const m=Object.keys(EX.manual).length;if(m)parts.push(`${m} row${m>1?'s':''} set by you`);
   $('shiftInfo').textContent=parts.length?'Moved: '+parts.join(' · '):'';}
 
+// ---- floor plans (tabs) ----
+const PKEY='loft-floor-plans-v1';let PLANS=null,renaming=false,delArm=0;
+const norm=p=>{const o={};for(const k of KEYS)o[k]=p[k]??null;return JSON.stringify(o);};
+const cleanP=p=>JSON.parse(norm({...DEF,...p}));
+function loadPlans(){let o=null;try{o=JSON.parse(localStorage.getItem(PKEY)||'null')}catch(e){}
+  if(!o||!Array.isArray(o.plans)||!o.plans.length)o={plans:[{id:'p1',name:'Loft',p:cleanP(load())}],active:'p1'};
+  if(!o.plans.some(x=>x.id===o.active))o.active=o.plans[0].id;return o;}
+function savePlans(){try{localStorage.setItem(PKEY,JSON.stringify(PLANS))}catch(e){}}
+const activePlan=()=>PLANS.plans.find(x=>x.id===PLANS.active)||PLANS.plans[0];
+const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function renderTabs(){const el=$('tabs');if(!el||!PLANS)return;
+  el.innerHTML=PLANS.plans.map(pl=>pl.id===PLANS.active&&renaming
+    ?`<input class="tabName" id="tabName" value="${esc(pl.name)}" maxlength="40" aria-label="Plan name">`
+    :`<button type="button" class="tab" role="tab" data-plan="${pl.id}" aria-selected="${pl.id===PLANS.active}">${esc(pl.name)}</button>`).join('')+
+   `<button type="button" class="tabAct tabAdd" id="planAdd">+ Add plan</button>`+
+   (renaming?`<button type="button" class="tabAct" id="planSave">Save name</button>`:`<button type="button" class="tabAct" id="planRen">✎ Rename</button>`)+
+   (PLANS.plans.length>1&&!renaming?`<button type="button" class="tabAct tabDel${delArm?' arm':''}" id="planDel">${delArm?'Tap again to delete':'Delete'}</button>`:'');
+  if(renaming){const i=$('tabName');i.focus();i.select();}}
+function switchPlan(id){if(id===PLANS.active)return;PLANS.active=id;savePlans();renaming=false;delArm=0;
+  hist=[];fut=[];lastSnap=null;histButtons();selRow=null;fill({...DEF,...activePlan().p});update();renderTabs();}
+function finishRename(){const i=$('tabName');if(!i)return;const v=i.value.trim();renaming=false;if(v){activePlan().name=v.slice(0,40);savePlans();queuePush();}renderTabs();}
+$('tabs').addEventListener('click',e=>{const t=e.target.closest('[data-plan]');if(t){switchPlan(t.dataset.plan);return;}
+  if(e.target.closest('#planAdd')){let n=PLANS.plans.length+1;while(PLANS.plans.some(x=>x.name==='Plan '+n))n++;
+    const id='p'+Date.now().toString(36);PLANS.plans.push({id,name:'Plan '+n,p:cleanP(read())});savePlans();queuePush();
+    switchPlan(id);renaming=true;renderTabs();toast('New plan added: a copy of the last one. Give it a name.');return;}
+  if(e.target.closest('#planRen')){renaming=true;delArm=0;renderTabs();return;}
+  if(e.target.closest('#planSave')){finishRename();return;}
+  if(e.target.closest('#planDel')){if(!delArm){delArm=1;renderTabs();setTimeout(()=>{if(delArm){delArm=0;renderTabs();}},3000);return;}
+    const gone=activePlan();delArm=0;PLANS.plans=PLANS.plans.filter(x=>x.id!==gone.id);PLANS.active='';const next=PLANS.plans[0].id;PLANS.active=next;savePlans();queuePush();
+    hist=[];fut=[];lastSnap=null;histButtons();fill({...DEF,...activePlan().p});update();renderTabs();toast(`Deleted “${gone.name}”`);}});
+$('tabs').addEventListener('keydown',e=>{if(e.target.id!=='tabName')return;if(e.key==='Enter'){e.preventDefault();finishRename();}else if(e.key==='Escape'){renaming=false;renderTabs();}});
+$('tabs').addEventListener('focusout',e=>{if(e.target.id==='tabName'&&!(e.relatedTarget&&e.relatedTarget.id==='planSave'))setTimeout(()=>{if(renaming)finishRename();},0);});
+
 // ---- sync through the Claude account (only inside the Claude app / claude.ai) ----
 let cloud=null,cloudReady=false,applying=false,lastCloud='',pushT=null,pushing=false;
-const norm=p=>{const o={};for(const k of KEYS)o[k]=p[k]??null;return JSON.stringify(o);};
 function syncState(t,cls){const e=$('syncState');if(!e)return;e.textContent=t;e.className='syncState '+(cls||'');e.hidden=false;}
-function queuePush(p){if(!cloud||!cloudReady||applying)return;const js=norm(p);if(js===lastCloud)return;
-  clearTimeout(pushT);pushT=setTimeout(async()=>{if(pushing){queuePush(read());return;}const cur=norm(read());if(cur===lastCloud)return;
-    pushing=true;syncState('Saving…');try{await cloud.set({p:JSON.parse(cur),at:Date.now()});lastCloud=cur;syncState('✓ Synced to your account','ok');}
+const plansJSON=()=>JSON.stringify(PLANS.plans);
+function queuePush(){if(!cloud||!cloudReady||applying||!PLANS)return;if(plansJSON()===lastCloud)return;
+  clearTimeout(pushT);pushT=setTimeout(async()=>{if(pushing){queuePush();return;}const cur=plansJSON();if(cur===lastCloud)return;
+    pushing=true;syncState('Saving…');try{await cloud.set({plans:JSON.parse(cur),at:Date.now()});lastCloud=cur;syncState('✓ Synced to your account','ok');}
     catch(e){syncState('Not synced: '+(e&&e.code==='not_granted'?'no permission':'try again later'),'bad');}finally{pushing=false;}},800);}
-(async()=>{const db=window.claude&&window.claude.use?await window.claude.use('db'):null;if(!db)return;
-  try{cloud=db.doc('settings/loft');}catch(e){return;}
+(async()=>{const db=window.claude&&window.claude.use?await window.claude.use('db'):null;if(!db)return;let legacy=null;
+  try{cloud=db.doc('settings/plans');legacy=db.doc('settings/loft');}catch(e){return;}
   syncState('Connecting…');const slow=setTimeout(()=>syncState('Sync can\'t be reached yet','bad'),10000);
   ['sendBtn','recvBtn'].forEach(id=>{const b=$(id);if(b)b.hidden=true;});
-  cloud.onSnapshot(snap=>{if(!snap.fromCache)clearTimeout(slow);
-    if(!snap.exists){if(!snap.fromCache&&!cloudReady){cloudReady=true;queuePush(read());}syncState('✓ Synced to your account','ok');return;}
-    const d=snap.data()||{};const js=norm({...DEF,...(d.p||{})});cloudReady=true;
-    if(js===lastCloud){syncState('✓ Synced to your account','ok');return;}
-    lastCloud=js;if(js!==norm(read())){applying=true;fill(JSON.parse(js));update();applying=false;if(!snap.hasPendingWrites)toast('Updated from your other device');}
-    syncState('✓ Synced to your account','ok');},
+  cloud.onSnapshot(async snap=>{if(!snap.fromCache)clearTimeout(slow);
+    if(!snap.exists){if(snap.fromCache||cloudReady)return;
+      // first run with tabs: bring across the single plan saved before tabs existed
+      try{const old=await legacy.get();const op=old.exists&&old.data()&&old.data().p;
+        if(op&&PLANS.plans.length===1){PLANS.plans[0].p=cleanP(op);savePlans();applying=true;fill({...DEF,...activePlan().p});update();applying=false;}}catch(e){}
+      cloudReady=true;queuePush();syncState('✓ Synced to your account','ok');return;}
+    const d=snap.data()||{};const cp=Array.isArray(d.plans)&&d.plans.length?d.plans:null;cloudReady=true;if(!cp)return;
+    const js=JSON.stringify(cp);if(js===lastCloud){syncState('✓ Synced to your account','ok');return;}
+    lastCloud=js;PLANS.plans=cp.map(x=>({id:String(x.id),name:String(x.name||'Plan'),p:cleanP(x.p||{})}));
+    if(!PLANS.plans.some(x=>x.id===PLANS.active)){PLANS.active=PLANS.plans[0].id;hist=[];fut=[];lastSnap=null;histButtons();}
+    savePlans();const ap={...DEF,...activePlan().p};
+    if(norm(ap)!==norm(read())){applying=true;fill(ap);update();applying=false;if(!snap.hasPendingWrites)toast('Updated from your other device');}
+    if(!renaming)renderTabs();syncState('✓ Synced to your account','ok');},
    e=>{clearTimeout(slow);syncState('Sync stopped. Reopen the page to retry','bad');});})();
 const APP_URL='https://ron-niddire.github.io/loft-floor-planner/';
 const b64e=str=>btoa(unescape(encodeURIComponent(str))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
@@ -723,7 +770,7 @@ $('cutEd').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault()
 $('cutEd').addEventListener('blur',commitCut);
 document.addEventListener('click',e=>{if(!e.target.closest('#plan'))hideTip();});
 function syncLine(p,R){const r2=p.lineAt!=='offset';if(locked){const eL=$('offL'),el=$('offR');if(r2)eL.value=Math.round(R.D[0]);if(p.lineDir!=='custom'||r2)el.value=Math.round(R.D[2]);return;}const el=$('offR'),eL=$('offL');eL.disabled=r2;if(r2)eL.value=Math.round(R.D[0]);el.disabled=p.lineDir!=='custom'||r2;if(el.disabled)el.value=Math.round(R.D[2]);}
-function update(){const p=read();R=compute(p);if(R.lineIdx!=null){EX.lineRow=R.lineIdx-R.lineBase;p.lineRow=EX.lineRow;}syncLine(p,R);p.offR=Math.round(R.D[2]);if(p.lineAt!=='offset')p.offL=Math.round(R.D[0]);save(p);queuePush(p);noteHistory(p);renderCallouts(p,R);renderPlan(p,R);renderTable(R);showShift();}
+function update(){const p=read();R=compute(p);if(R.lineIdx!=null){EX.lineRow=R.lineIdx-R.lineBase;p.lineRow=EX.lineRow;}syncLine(p,R);p.offR=Math.round(R.D[2]);if(p.lineAt!=='offset')p.offL=Math.round(R.D[0]);save(p);if(PLANS){const ap=activePlan();if(ap)ap.p=cleanP(p);savePlans();}queuePush();noteHistory(p);renderCallouts(p,R);renderPlan(p,R);renderTable(R);showShift();}
 $('rows').addEventListener('mouseover',e=>{const tr=e.target.closest('tr');const hl=$('hl');if(!tr||!hl||!R)return;
   const r=R.rows[+tr.dataset.r];hl.setAttribute('y',r.y);hl.setAttribute('height',r.w);hl.setAttribute('visibility','visible');});
 $('rows').addEventListener('mouseleave',()=>{const hl=$('hl');if(hl)hl.setAttribute('visibility','hidden');});
@@ -740,7 +787,7 @@ $('lock').addEventListener('click',e=>{e.stopPropagation();locked=!locked;applyL
 $('side').addEventListener('click',e=>{if(!locked||e.target.closest('#lockbar'))return;
   const bar=$('lockbar');bar.classList.remove('nudge');void bar.offsetWidth;bar.classList.add('nudge');
   bar.scrollIntoView({block:'nearest',behavior:'smooth'});});
-fill(load());
+PLANS=loadPlans();fill({...DEF,...activePlan().p});renderTabs();
 // settings arriving in a link (QR scan)
 {const o=parseSettings(location.hash);if(o){const p={...DEF};for(const k of KEYS)if(k in o)p[k]=o[k];fill(p);
   try{history.replaceState(null,'',location.pathname)}catch(e){}setTimeout(()=>toast('Settings loaded from the Studio'),300);}}
