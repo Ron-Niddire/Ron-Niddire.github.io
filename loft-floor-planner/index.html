@@ -542,7 +542,7 @@ const GRAIN=(()=>{let seed=11;const rnd=()=>{seed=(seed*16807)%2147483647;return
     out+=`<pattern id="g${k}" width="${W}" height="${H}" patternUnits="userSpaceOnUse" patternTransform="translate(${Math.round(rnd()*W)} ${Math.round(rnd()*H)})"><path class="s-grain" d="${d}"/></pattern>`;}
   return out;})();
 function renderPlan(p,R){
-  const {RL,RW,gap}=R,mL=1150,mR=1150,mT=800,mB=760;
+  const {RL,RW,gap}=R,mL=1500,mR=1150,mT=800,mB=760;
   const fs=Math.max(80,Math.min(R.bw*.6,130));
   const svg=$('plan');
   svg.setAttribute('viewBox',`${-mL} ${-mT} ${RL+mL+mR} ${RW+mT+mB}`);
@@ -575,20 +575,21 @@ function renderPlan(p,R){
   // chalk line
   const Y=R.Yline;
   h+=`<line class="s-line" x1="-60" y1="${Y}" x2="${RL+60}" y2="${Y}"/>`;
-  h+=`<line class="s-linehit" data-line="1" x1="-800" y1="${Y}" x2="${RL+60}" y2="${Y}"/>`;
-  h+=`<line class="s-line s-lead" x1="-610" y1="${Y}" x2="-60" y2="${Y}"/>`;
-  h+=`<g class="s-handle" data-line="1" transform="translate(-690 ${Y})"><rect x="-80" y="-80" width="160" height="160" rx="40"/><path d="M0 -52 L28 -16 H-28 Z M0 52 L28 16 H-28 Z"/></g>`;
+  h+=`<line class="s-linehit" data-line="1" x1="-1480" y1="${Y}" x2="${RL+60}" y2="${Y}"/>`;
+  h+=`<line class="s-line s-lead" x1="-1320" y1="${Y}" x2="-60" y2="${Y}"/>`;
+  h+=`<g class="s-handle" data-line="1" transform="translate(-1400 ${Y})"><rect x="-80" y="-80" width="160" height="160" rx="40"/><path d="M0 -52 L28 -16 H-28 Z M0 52 L28 16 H-28 Z"/></g>`;
   h+=`<text class="s-t s-c s-halo" x="${RL*0.32}" y="${Y-50}" text-anchor="middle" font-size="110">CHALK LINE</text>`;
   const tag=(x,anchor,i)=>`<text class="s-t s-c s-halo" x="${x}" y="${Y-50}" text-anchor="${anchor}" font-size="105">↑ ${mm(R.backDist[i])} to back</text>
     <text class="s-t s-c s-halo" x="${x}" y="${Y+140}" text-anchor="${anchor}" font-size="105">↓ ${mm(R.D[i])} to front</text>`;
-  h+=tag(80,'start',0)+tag(RL-80,'end',2);
+  h+=`<text class="s-t s-c" x="-1010" y="${Y-45}" font-size="105" font-weight="600">↑ ${mm(R.backDist[0])}</text><text class="s-t s-c" x="-1010" y="${Y+120}" font-size="105" font-weight="600">↓ ${mm(R.D[0])}</text>`;
+  h+=tag(RL-80,'end',2);
   if(Math.abs(xm-RL*0.32)>1200&&xm>1500&&xm<RL-1500)h+=tag(xm+60,'start',1);
 
   // row labels
   h+=`<text class="s-t s-c" x="-90" y="-110" text-anchor="end" font-size="${fs*.8}">Left wall cut</text>`;
   h+=`<text class="s-t s-m" x="${RL+90}" y="-110" font-size="${fs*.8}">Right end</text>`;
   for(const r of R.rows){const cy=r.cy;
-    h+=`<text class="s-t s-m" x="${-mL+70}" y="${cy}" dominant-baseline="central" font-size="${fs*.8}">R${r.i+1}</text>`;
+    h+=`<text class="s-t s-m" x="-1270" y="${cy}" dominant-baseline="central" font-size="${fs*.8}">R${r.i+1}</text>`;
     h+=`<text class="s-t s-c" x="-90" y="${cy}" text-anchor="end" dominant-baseline="central" font-size="${fs}"${r.manual?' style="fill:var(--saw)"':''}>${mm(r.s)}</text>`;
     h+=`<text class="s-t s-m" x="${RL+90}" y="${cy}" dominant-baseline="central" font-size="${fs}">${r.e?mm(r.e):'—'}</text>`;}
   // dimensions + wall names
