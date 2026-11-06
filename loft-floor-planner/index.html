@@ -49,7 +49,24 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--chalk)}
 button{font:inherit;font-weight:600;font-size:14px;padding:8px 12px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
 button:hover{background:var(--hover)}
 button:disabled{opacity:.45;cursor:default}
-.hbtns{display:flex;gap:8px;flex-wrap:wrap}
+.hbtns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.syncState{font-size:13px;font-weight:600;color:var(--muted)}
+.syncState.ok{color:var(--good)}
+.syncState.bad{color:var(--saw)}
+.sync{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:18px}
+.syncHead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+.syncBody{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start}
+.syncText{flex:1 1 280px;min-width:0;max-width:62ch}
+.syncText p{margin:0 0 10px}
+.qr{background:#fff;padding:10px;border-radius:6px;line-height:0;border:1px solid var(--line)}
+.qr img,.qr svg{width:200px;height:200px;max-width:100%}
+.copyRow{display:flex;gap:8px}
+.copyRow input{flex:1;min-width:0;font:inherit;font-family:var(--f-num);font-size:13px;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+#scanBtn{background:var(--chalk);color:#fff;border-color:var(--chalk);font-size:16px;padding:12px 18px;width:100%;max-width:340px}
+.scanRow{margin:6px 0 10px}
+.scanBox video{width:100%;max-width:340px;border-radius:8px;background:#000;display:block}
+#copyBtn,#loadBtn{background:var(--chalk);color:#fff;border-color:var(--chalk)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:20;background:var(--good);color:#fff;font-weight:600;padding:10px 16px;border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.25)}
 .lockbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:8px;background:var(--ink);color:var(--panel);font-weight:600}
 .lockbar button{background:var(--panel);color:var(--ink);border-color:var(--panel);font-size:15px;padding:9px 14px}
 .lockbar.open{background:var(--good)}
@@ -116,6 +133,8 @@ td .w3{color:var(--saw)}
 @media (prefers-reduced-motion:no-preference){.s-hl{transition:y .12s}}
 </style>
 
+<script src="qrcode.js"></script>
+<script src="jsQR.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -123,10 +142,33 @@ td .w3{color:var(--saw)}
     <div>
       <div class="eyebrow">Loft · laminate layout</div>
       <h1>Loft Floor Planner</h1>
-      <p class="sub">Boards run lengthways from the back-left corner. Change any measurement and the plan, cut lengths and order quantities update. Your measurements are locked in. Tap “Unlock to edit” to change them.</p>
+      <p class="sub">Boards run lengthways from the back-left corner. Change any measurement and the plan, cut lengths and order quantities update. Your measurements are locked in. Tap “Unlock to edit” to change them, and use Send to phone to copy them across.</p>
     </div>
-    <button id="reset" type="button">Reset to my measurements</button>
+    <div class="hbtns"><button id="sendBtn" type="button">Send to phone</button><button id="recvBtn" type="button">Load from Studio</button><button id="reset" type="button">Reset to my measurements</button><span id="syncState" class="syncState" hidden></span></div>
   </header>
+
+  <section class="sync" id="sendPanel" hidden>
+    <div class="syncHead"><h2>Send these settings to your phone</h2><button type="button" class="closeP" data-close="sendPanel">Close</button></div>
+    <div class="syncBody">
+      <div id="qr" class="qr" aria-label="QR code"></div>
+      <div class="syncText">
+        <p><b>On the iPhone:</b> open the Loft Floor app, tap <b>Load from Studio</b>, then <b>Scan QR code</b> and point the camera at this code.</p>
+        <p class="hint">Or tap <b>Copy</b> and use <b>Paste</b> on the iPhone instead. That works when both are signed in to the same Apple ID.</p>
+        <div class="copyRow"><input id="sendLink" type="text" readonly aria-label="Settings link"><button id="copyBtn" type="button">Copy</button></div>
+        <p class="hint" id="copyMsg"></p>
+      </div>
+    </div>
+  </section>
+  <section class="sync" id="recvPanel" hidden>
+    <div class="syncHead"><h2>Load settings from the Studio</h2><button type="button" class="closeP" data-close="recvPanel">Close</button></div>
+    <p class="hint">On the Studio tap <b>Send to phone</b> to show the QR code, then scan it here.</p>
+    <div class="scanRow" id="scanRow"><button id="scanBtn" type="button">Scan QR code</button></div>
+    <div class="scanBox" id="scanBox" hidden><video id="scanVideo" playsinline muted></video><p class="hint">Point the camera at the QR code on the Studio screen.</p></div>
+    <p class="hint">Or paste a copied link:</p>
+    <div class="copyRow"><input id="recvLink" type="text" placeholder="Paste the settings link" aria-label="Settings link to load"><button id="pasteBtn" type="button">Paste</button><button id="loadBtn" type="button">Load</button></div>
+    <p class="hint" id="recvMsg"></p>
+  </section>
+  <div class="toast" id="toast" hidden></div>
 
   <div class="grid">
     <aside id="side">
@@ -533,6 +575,37 @@ function renderTable(R){
 }
 
 let R=null,HL=null;
+// ---- sync through the Claude account (only inside the Claude app / claude.ai) ----
+let cloud=null,cloudReady=false,applying=false,lastCloud='',pushT=null,pushing=false;
+const norm=p=>{const o={};for(const k of F)o[k]=p[k]??null;return JSON.stringify(o);};
+function syncState(t,cls){const e=$('syncState');if(!e)return;e.textContent=t;e.className='syncState '+(cls||'');e.hidden=false;}
+function queuePush(p){if(!cloud||!cloudReady||applying)return;const js=norm(p);if(js===lastCloud)return;
+  clearTimeout(pushT);pushT=setTimeout(async()=>{if(pushing){queuePush(read());return;}const cur=norm(read());if(cur===lastCloud)return;
+    pushing=true;syncState('Saving…');try{await cloud.set({p:JSON.parse(cur),at:Date.now()});lastCloud=cur;syncState('✓ Synced to your account','ok');}
+    catch(e){syncState('Not synced: '+(e&&e.code==='not_granted'?'no permission':'try again later'),'bad');}finally{pushing=false;}},800);}
+(async()=>{const db=window.claude&&window.claude.use?await window.claude.use('db'):null;if(!db)return;
+  try{cloud=db.doc('settings/loft');}catch(e){return;}
+  syncState('Connecting…');const slow=setTimeout(()=>syncState('Sync can\'t be reached yet','bad'),10000);
+  ['sendBtn','recvBtn'].forEach(id=>{const b=$(id);if(b)b.hidden=true;});
+  cloud.onSnapshot(snap=>{if(!snap.fromCache)clearTimeout(slow);
+    if(!snap.exists){if(!snap.fromCache&&!cloudReady){cloudReady=true;queuePush(read());}syncState('✓ Synced to your account','ok');return;}
+    const d=snap.data()||{};const js=norm({...DEF,...(d.p||{})});cloudReady=true;
+    if(js===lastCloud){syncState('✓ Synced to your account','ok');return;}
+    lastCloud=js;if(js!==norm(read())){applying=true;fill(JSON.parse(js));update();applying=false;if(!snap.hasPendingWrites)toast('Updated from your other device');}
+    syncState('✓ Synced to your account','ok');},
+   e=>{clearTimeout(slow);syncState('Sync stopped. Reopen the page to retry','bad');});})();
+const APP_URL='https://ron-niddire.github.io/loft-floor-planner/';
+const b64e=str=>btoa(unescape(encodeURIComponent(str))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+const b64d=str=>{str=str.replace(/-/g,'+').replace(/_/g,'/');while(str.length%4)str+='=';return decodeURIComponent(escape(atob(str)));};
+function settingsLink(){const p=read();const diff={};for(const k of F)if(JSON.stringify(p[k])!==JSON.stringify(DEF[k]))diff[k]=p[k];
+  return APP_URL+'#s='+b64e(JSON.stringify(diff));}
+function parseSettings(text){const m=String(text||'').match(/[#?&]?s=([A-Za-z0-9_-]+)/);if(!m)return null;
+  try{const o=JSON.parse(b64d(m[1]));return o&&typeof o==='object'?o:null;}catch(e){return null;}}
+function applySettings(o){const p={...DEF};for(const k of F)if(k in o)p[k]=o[k];fill(p);update();}
+function toast(msg){const t=$('toast');t.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,3000);}
+function showQR(link){const box=$('qr');box.innerHTML='';
+  if(typeof qrcode!=='function'){box.textContent='QR not available offline';return;}
+  try{const q=qrcode(0,'L');q.addData(link);q.make();box.innerHTML=q.createSvgTag({cellSize:4,margin:2,scalable:true});}catch(e){box.textContent='Too much to fit in a QR code. Use Copy instead.';}}
 function pieceInfo(r,j){const pc=r.pieces[j],last=j===r.pieces.length-1;
   const what=j===0?(r.s<R.L-.5?'Cut at left wall':'Full board, left wall'):(pc.kind==='end'?'Cut at right wall':'Full board');
   const src=j===0?r.sSrc:(pc.kind==='end'?r.eSrc:'');
@@ -555,7 +628,7 @@ $('plan').addEventListener('pointerleave',e=>{if(e.pointerType==='mouse')hideTip
 $('plan').addEventListener('click',showTip);
 document.addEventListener('click',e=>{if(!e.target.closest('#plan'))hideTip();});
 function syncLine(p,R){const r2=p.lineAt!=='offset';if(locked){const eL=$('offL'),el=$('offR');if(r2)eL.value=Math.round(R.D[0]);if(p.lineDir!=='custom'||r2)el.value=Math.round(R.D[2]);return;}const el=$('offR'),eL=$('offL');eL.disabled=r2;if(r2)eL.value=Math.round(R.D[0]);el.disabled=p.lineDir!=='custom'||r2;if(el.disabled)el.value=Math.round(R.D[2]);}
-function update(){const p=read();R=compute(p);syncLine(p,R);p.offR=Math.round(R.D[2]);if(p.lineAt!=='offset')p.offL=Math.round(R.D[0]);save(p);renderCallouts(p,R);renderPlan(p,R);renderTable(R);}
+function update(){const p=read();R=compute(p);syncLine(p,R);p.offR=Math.round(R.D[2]);if(p.lineAt!=='offset')p.offL=Math.round(R.D[0]);save(p);queuePush(p);renderCallouts(p,R);renderPlan(p,R);renderTable(R);}
 $('rows').addEventListener('mouseover',e=>{const tr=e.target.closest('tr');const hl=$('hl');if(!tr||!hl||!R)return;
   const r=R.rows[+tr.dataset.r];hl.setAttribute('y',r.y);hl.setAttribute('height',r.w);hl.setAttribute('visibility','visible');});
 $('rows').addEventListener('mouseleave',()=>{const hl=$('hl');if(hl)hl.setAttribute('visibility','hidden');});
@@ -572,8 +645,38 @@ $('lock').addEventListener('click',e=>{e.stopPropagation();locked=!locked;applyL
 $('side').addEventListener('click',e=>{if(!locked||e.target.closest('#lockbar'))return;
   const bar=$('lockbar');bar.classList.remove('nudge');void bar.offsetWidth;bar.classList.add('nudge');
   bar.scrollIntoView({block:'nearest',behavior:'smooth'});});
-fill(load());update();applyLock();
+fill(load());
+// settings arriving in a link (QR scan)
+{const o=parseSettings(location.hash);if(o){const p={...DEF};for(const k of F)if(k in o)p[k]=o[k];fill(p);
+  try{history.replaceState(null,'',location.pathname)}catch(e){}setTimeout(()=>toast('Settings loaded from the Studio'),300);}}
+update();applyLock();
 if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+$('sendBtn').addEventListener('click',()=>{const link=settingsLink();$('sendLink').value=link;showQR(link);$('copyMsg').textContent='';
+  $('recvPanel').hidden=true;$('sendPanel').hidden=false;$('sendPanel').scrollIntoView({block:'start',behavior:'smooth'});});
+$('recvBtn').addEventListener('click',()=>{$('recvMsg').textContent='';$('sendPanel').hidden=true;$('recvPanel').hidden=false;$('recvPanel').scrollIntoView({block:'start',behavior:'smooth'});});
+document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>{$(b.dataset.close).hidden=true;}));
+$('copyBtn').addEventListener('click',()=>{const v=$('sendLink').value;const done=()=>{$('copyMsg').textContent='Copied. Now tap Load from Studio on your iPhone, then Paste.';};
+  const fallback=()=>{const i=$('sendLink');i.focus();i.select();try{document.execCommand('copy');done();}catch(e){$('copyMsg').textContent='Press ⌘C to copy the selected link.';}};
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(v).then(done,fallback);else fallback();});
+$('pasteBtn').addEventListener('click',async()=>{try{const t=await navigator.clipboard.readText();$('recvLink').value=t;loadFromBox();}catch(e){$('recvMsg').textContent='Paste was blocked. Long-press the box, choose Paste, then tap Load.';$('recvLink').focus();}});
+function loadFromBox(){const o=parseSettings($('recvLink').value);if(!o){$('recvMsg').textContent="That doesn't look like a settings link. Copy it again on the Studio.";return;}
+  applySettings(o);$('recvPanel').hidden=true;$('recvLink').value='';toast('Settings loaded from the Studio');}
+$('loadBtn').addEventListener('click',loadFromBox);
+let scanStream=null;
+function stopScan(){if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null;}$('scanBox').hidden=true;}
+if(typeof jsQR!=='function'||!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia))$('scanRow').hidden=true;
+$('scanBtn').addEventListener('click',async()=>{$('recvMsg').textContent='';
+  try{scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});}
+  catch(e){$('recvMsg').textContent='The camera was blocked. Allow camera access for this app in Settings, or paste the link instead.';return;}
+  const v=$('scanVideo');v.srcObject=scanStream;$('scanBox').hidden=false;await v.play().catch(()=>{});
+  const cv=document.createElement('canvas'),ctx=cv.getContext('2d',{willReadFrequently:true});
+  const tick=()=>{if(!scanStream)return;
+    if(v.readyState>=2&&v.videoWidth){const sc=Math.min(1,640/v.videoWidth);cv.width=v.videoWidth*sc;cv.height=v.videoHeight*sc;ctx.drawImage(v,0,0,cv.width,cv.height);
+      const img=ctx.getImageData(0,0,cv.width,cv.height);const code=jsQR(img.data,img.width,img.height,{inversionAttempts:'dontInvert'});
+      if(code&&code.data){const o=parseSettings(code.data);if(o){stopScan();applySettings(o);$('recvPanel').hidden=true;toast('Settings loaded from the Studio');return;}}}
+    requestAnimationFrame(tick);};
+  tick();});
+document.querySelectorAll('[data-close="recvPanel"]').forEach(b=>b.addEventListener('click',stopScan));
 </script>
 
 </body>
