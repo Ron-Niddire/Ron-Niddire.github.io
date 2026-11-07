@@ -184,7 +184,7 @@ td .w3{color:var(--saw)}
       <h1>Loft Floor Planner</h1>
       <p class="sub">Boards run lengthways from the back-left corner. Change any measurement and the plan, cut lengths and order quantities update. Each floor plan tab has its own lock. A locked room can't be changed, so you can work on another room without knocking it.</p>
     </div>
-    <div class="hbtns"><button id="sendBtn" type="button">Send to phone</button><button id="recvBtn" type="button">Load from Studio</button><button id="reset" type="button">Reset to my measurements</button><span id="syncState" class="syncState" hidden></span></div>
+    <div class="hbtns"><button id="sendBtn" type="button">Send to phone</button><button id="recvBtn" type="button">Load from Studio</button><button id="syncBtn" type="button">Turn on sync</button><button id="reset" type="button">Reset to my measurements</button><span id="syncState" class="syncState" hidden></span></div>
   </header>
 
   <section class="sync" id="sendPanel" hidden>
@@ -329,6 +329,32 @@ td .w3{color:var(--saw)}
   </div>
 </div>
 
+<script>/* Sync through Supabase: stands in for the Claude db so the same sync code keeps every device that has the sync code in step */
+(function(){
+  var SB='https://mlhhjwacaidswoevppol.supabase.co',KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1saGhqd2FjYWlkc3dvZXZwcG9sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQwNjkxOTIsImV4cCI6MjEwOTY0NTE5Mn0.BbPyo6i3y-6Y_Z1cpalwoLWVcXjoaoI-AV8ptqfEDSI',CK='loft-sync-code';
+  var m=location.hash.match(/sync=([A-Za-z0-9_-]{24,})/);
+  if(m){try{localStorage.setItem(CK,m[1])}catch(e){}history.replaceState(null,'',location.pathname+location.search);}
+  var code=null;try{code=localStorage.getItem(CK)}catch(e){}
+  window.loftSyncCode=code;
+  if(!code)return;
+  function rpc(fn,body){return fetch(SB+'/rest/v1/rpc/'+fn,{method:'POST',headers:{'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(function(r){if(!r.ok)throw new Error('http '+r.status);return r.json();});}
+  var subs=[],lastAt=-1,cur=null,first=true,errs=[];
+  function snap(d){return {exists:!!d,fromCache:false,hasPendingWrites:false,data:function(){return d}};}
+  function emit(){subs.forEach(function(cb){cb(snap(cur))});}
+  function poll(){rpc('loft_get',{p_code:code}).then(function(r){
+      if(!r){if(first){first=false;emit();}return;}
+      if(first||r.at!==lastAt){first=false;lastAt=r.at;cur=r.data;emit();}
+    }).catch(function(e){errs.forEach(function(f){f(e)});});}
+  var doc={
+    set:function(d){var at=d.at||Date.now();return rpc('loft_put',{p_code:code,p_data:d,p_at:at}).then(function(r){if(r){lastAt=r.at;cur=r.data;}});},
+    onSnapshot:function(cb,err){subs.push(cb);if(err)errs.push(err);if(subs.length===1){poll();setInterval(function(){if(!document.hidden)poll();},8000);
+      document.addEventListener('visibilitychange',function(){if(!document.hidden)poll();});window.addEventListener('focus',poll);}
+      return function(){subs=subs.filter(function(x){return x!==cb})};}};
+  var none={get:function(){return Promise.resolve(snap(null))},onSnapshot:function(cb){setTimeout(function(){cb(snap(null))},0);return function(){}},set:function(){return Promise.resolve()}};
+  window.claude={use:function(n){return Promise.resolve(n==='db'?{doc:function(p){return p==='settings/plans'?doc:none}}:null)}};
+})();
+</script>
 <script>
 const F=['roomL','gap','wL','wM','wMidX','wR','lineAt','offL','lineDir','offR','offMid','boardL','boardW','perPack','kerf','mode','minPiece','minStagger','rip','minRow','stairOn','stairSide','stairX','stairT','stairInner','stairDepth','stairFloored','spare','rollM2'];
 const EXK=['shiftX','shiftY','manual','lineRow'];
@@ -720,7 +746,7 @@ function syncState(t,cls){const e=$('syncState');if(!e)return;e.textContent=t;e.
 const plansJSON=()=>JSON.stringify(PLANS.plans);
 function queuePush(){if(!cloud||!cloudReady||applying||!PLANS)return;if(plansJSON()===lastCloud)return;
   clearTimeout(pushT);pushT=setTimeout(async()=>{if(pushing){queuePush();return;}const cur=plansJSON();if(cur===lastCloud)return;
-    pushing=true;syncState('Saving…');try{await cloud.set({plans:JSON.parse(cur),at:Date.now()});lastCloud=cur;syncState('✓ Synced to your account','ok');}
+    pushing=true;syncState('Saving…');try{await cloud.set({plans:JSON.parse(cur),at:Date.now()});lastCloud=cur;syncState('✓ Synced','ok');}
     catch(e){syncState('Not synced: '+(e&&e.code==='not_granted'?'no permission':'try again later'),'bad');}finally{pushing=false;}},800);}
 (async()=>{const db=window.claude&&window.claude.use?await window.claude.use('db'):null;if(!db)return;let legacy=null;
   try{cloud=db.doc('settings/plans');legacy=db.doc('settings/loft');}catch(e){return;}
@@ -731,15 +757,15 @@ function queuePush(){if(!cloud||!cloudReady||applying||!PLANS)return;if(plansJSO
       // first run with tabs: bring across the single plan saved before tabs existed
       try{const old=await legacy.get();const op=old.exists&&old.data()&&old.data().p;
         if(op&&PLANS.plans.length===1){PLANS.plans[0].p=cleanP(op);savePlans();applying=true;fill({...DEF,...activePlan().p});update();applying=false;}}catch(e){}
-      cloudReady=true;queuePush();syncState('✓ Synced to your account','ok');return;}
+      cloudReady=true;queuePush();syncState('✓ Synced','ok');return;}
     const d=snap.data()||{};const cp=Array.isArray(d.plans)&&d.plans.length?d.plans:null;cloudReady=true;if(!cp)return;
-    const js=JSON.stringify(cp);if(js===lastCloud){syncState('✓ Synced to your account','ok');return;}
+    const js=JSON.stringify(cp);if(js===lastCloud){syncState('✓ Synced','ok');return;}
     lastCloud=js;PLANS.plans=cp.map(x=>({id:String(x.id),name:String(x.name||'Plan'),p:cleanP(x.p||{}),locked:!!x.locked}));
     if(!PLANS.plans.some(x=>x.id===PLANS.active)){PLANS.active=PLANS.plans[0].id;hist=[];fut=[];lastSnap=null;histButtons();}
     savePlans();const ap={...DEF,...activePlan().p};
     if(norm(ap)!==norm(read())){applying=true;fill(ap);update();applying=false;if(!snap.hasPendingWrites)toast('Updated from your other device');}
     if(!!activePlan().locked!==locked){locked=!!activePlan().locked;applyLock();renderTable(R);}
-    if(!renaming)renderTabs();syncState('✓ Synced to your account','ok');},
+    if(!renaming)renderTabs();syncState('✓ Synced','ok');},
    e=>{clearTimeout(slow);syncState('Sync stopped. Reopen the page to retry','bad');});})();
 const APP_URL='https://ron-niddire.github.io/loft-floor-planner/';
 const b64e=str=>btoa(unescape(encodeURIComponent(str))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
@@ -899,5 +925,8 @@ $('scanBtn').addEventListener('click',async()=>{$('recvMsg').textContent='';
 document.querySelectorAll('[data-close="recvPanel"]').forEach(b=>b.addEventListener('click',stopScan));
 </script>
 
+<script>(function(){var b=document.getElementById('syncBtn');if(window.loftSyncCode){b.hidden=true;return;}
+b.addEventListener('click',function(){var v=prompt('Paste your sync link or sync code');if(!v)return;var m=v.match(/([A-Za-z0-9_-]{24,})/);if(!m){alert('That doesn\'t look like a sync code.');return;}
+try{localStorage.setItem('loft-sync-code',m[1])}catch(e){}location.reload();});})();</script>
 </body>
 </html>
