@@ -153,6 +153,9 @@ tbody tr:hover,tbody tr.on{background:var(--hover)}
 .s-room{fill:none;stroke:var(--ink);stroke-width:40}
 .s-board{stroke:var(--joint);stroke-width:7;stroke-linejoin:miter}
 .s-chalk{stroke:var(--chalk);stroke-width:28}
+.s-wcut rect{fill:#fff;stroke:var(--saw);stroke-width:8}.s-wcut text{fill:var(--saw);font-weight:700}
+#wcutBtn[aria-pressed="true"]{background:var(--saw);color:#fff;border-color:var(--saw)}
+.wcl{font-family:var(--f-num);font-weight:600;color:var(--saw);white-space:nowrap}
 .s-notch{fill:none;stroke:var(--saw);stroke-width:16;stroke-dasharray:60 34}
 .s-wall{fill:var(--wall);stroke:#ece7dc;stroke-width:10}
 .s-hbg{fill:var(--hatchbg)}
@@ -299,7 +302,7 @@ td .w3{color:var(--saw)}
           <span class="nudge" role="group" aria-label="Nudge the floor 10 mm"><button type="button" data-nx="-10" aria-label="Left 10 mm">←</button><button type="button" data-nx="10" aria-label="Right 10 mm">→</button><button type="button" data-ny="-10" aria-label="Up 10 mm">↑</button><button type="button" data-ny="10" aria-label="Down 10 mm">↓</button></span>
           <span class="nudge" role="group" aria-label="Move the chalk line a row"><button type="button" id="lineUp">Line ↑</button><button type="button" id="lineDn">Line ↓</button></span>
           <button id="centreBtn" type="button">Reset position</button>
-          <button id="lastBtn" type="button" aria-pressed="true">▭ Last row widths</button>
+          <button id="lastBtn" type="button" aria-pressed="true">▭ Last row widths</button><button id="wcutBtn" type="button" aria-pressed="true">Cuts at walls</button>
           <span id="shiftInfo"></span>
         </div>
         <div class="planWrap"><div id="tip" class="tip" hidden></div><input id="cutEd" class="cutEd" type="number" inputmode="numeric" min="1" step="1" hidden aria-label="Left wall piece (mm)"><div class="planScroll"><svg id="plan" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Floor plan with board layout"></svg></div></div>
@@ -312,7 +315,7 @@ td .w3{color:var(--saw)}
           <table>
             <thead><tr>
               <th>Row</th><th class="n">Width L / M / R</th><th class="n">Left wall piece</th><th>Comes from</th><th class="n">Joint offset</th>
-              <th class="n">Full boards</th><th class="n">Right wall piece</th><th>Comes from</th><th>Stair cut</th>
+              <th class="n">Full boards</th><th class="n">Right wall piece</th><th>Comes from</th><th>Stair cuts</th>
             </tr></thead>
             <tbody id="rows"></tbody>
           </table>
@@ -511,8 +514,17 @@ function compute0(p){
   for(const r of rows)for(const pc of r.pieces){pc.notch=false;pc.hidden=false;
     for(const e of ex){const ax0=e.x0-gap,ax1=e.x1+gap,ay0=e.y0-gap,ay1=e.y1+gap;
       const ix=pc.x1>ax0&&pc.x0<ax1,iy=r.y+r.w>ay0&&r.y<ay1;
-      if(ix&&iy){const inside=pc.x0>=ax0&&pc.x1<=ax1&&r.y>=ay0&&r.y+r.w<=ay1;if(inside)pc.hidden=true;else pc.notch=true;}}
+      if(ix&&iy){const inside=pc.x0>=ax0&&pc.x1<=ax1&&r.y>=ay0&&r.y+r.w<=ay1;if(inside)pc.hidden=true;else if(!(ay0<=r.y+1&&ay1>=r.y+r.w-1))pc.notch=true;}}
     if(pc.notch&&!pc.hidden){r.notch++;notchBoards++;}}
+  // where a stair wall blocks the whole row, the board running into it is cut straight: record each piece length and where it sits
+  for(const r of rows){r.wcuts=[];const iv=[];
+    for(const e of ex){const ay0=e.y0-gap,ay1=e.y1+gap;if(ay0<=r.y+1&&ay1>=r.y+r.w-1)iv.push([e.x0-gap,e.x1+gap]);}
+    if(!iv.length)continue;iv.sort((a,b)=>a[0]-b[0]);const U=[iv[0].slice()];for(const q of iv.slice(1)){const l=U[U.length-1];if(q[0]<=l[1])l[1]=Math.max(l[1],q[1]);else U.push(q.slice());}
+    for(const pc of r.pieces){if(pc.hidden)continue;let fr=[[pc.x0,pc.x1]];
+      for(const u of U)fr=fr.flatMap(([a,b])=>b<=u[0]||a>=u[1]?[[a,b]]:[...(a<u[0]?[[a,u[0]]]:[]),...(b>u[1]?[[u[1],b]]:[])]);
+      fr=fr.filter(([a,b])=>b-a>1);if(!fr.length){pc.hidden=true;continue;}
+      for(const [a,b] of fr){const cutL=a>pc.x0+1,cutR=b<pc.x1-1;if(!cutL&&!cutR)continue;
+        r.wcuts.push(cutL?{x:a,len:b-a,side:'R'}:{x:b,len:b-a,side:'L'});}}}
 
   // area by shoelace
   const poly=[[0,yB[0]],[xm,yB[1]],[RL,yB[2]],[RL,yF[2]],[xm,yF[1]],[0,yF[0]]];
@@ -526,7 +538,7 @@ function compute0(p){
 
   const usedArea=rows.reduce((t,r)=>t+r.w,0)*UL;
   return{L,bw,gap,RL,RW,UL,XS,W,D,yF,yB,Yline,backDist,poly,rows,bounds,balanced,ex,newBoards,withSpare,
-    packs:Math.ceil(withSpare/p.perPack),packM2:p.perPack*L*bw/1e6,area,rolls:Math.ceil(area/p.rollM2),notchBoards,
+    packs:Math.ceil(withSpare/p.perPack),packM2:p.perPack*L*bw/1e6,area,rolls:Math.ceil(area/p.rollM2),notchBoards,wallCuts:rows.reduce((a,r)=>a+(r.wcuts?r.wcuts.length:0),0),
     waste:Math.max(0,1-(area*1e6)/(newBoards*L*bw)),joint,
     stairJoint,backVar:Ybmax-Ybmin,frontVar:Yfmax-Yfmin};
 }
@@ -572,8 +584,8 @@ function renderCallouts(p,R){
   if(p.stairOn){const sj=R.stairJoint,on=sj!=null&&Math.abs(sj)<1;cards.push({k:'Stair wall ends',chip:on?['ok','Joint lines up']:['cut','Joint off'],
      v:sj==null?'—':on?'0 mm':`${mm(Math.abs(sj))} mm ${sj>0?'past':'short'}`,
      d:on?'A board joint runs straight across the ends of the stair walls, so the row in front of them needs no notches.':'Nearest board joint to the end of the stair walls. Set "Put the line" to "Start of row 2, joint on stair walls" to line it up.'});}
-  if(p.stairOn)cards.push({k:'Around stair walls',chip:R.notchBoards?['cut','Notch cuts']:['ok','None'],v:`${R.notchBoards} piece${R.notchBoards===1?'':'s'}`,
-     d:'Pieces that run into a stair wall or the hatch opening and need shaping. Listed row by row in the cut list.'});
+  if(p.stairOn)cards.push({k:'Around stair walls',chip:R.notchBoards||R.wallCuts?['cut',R.notchBoards?'Notch cuts':'Straight cuts']:['ok','None'],v:`${R.wallCuts+R.notchBoards} piece${R.wallCuts+R.notchBoards===1?'':'s'}`,
+     d:`${R.wallCuts} cut straight where they meet a stair wall${R.notchBoards?`, ${R.notchBoards} notched round a corner`:''}. Sizes show on the plan in orange and in the cut list.`});
   $('callouts').innerHTML=cards.map(c=>`<div class="co"><div class="k">${c.k}<span class="chip ${c.chip[0]}">${c.chip[1]}</span></div><div class="v">${c.v}</div><div class="d">${c.d}</div></div>`).join('');
 }
 
@@ -632,6 +644,8 @@ function renderPlan(p,R){
   if(Math.abs(xm-RL*0.32)>1200&&xm>1500&&xm<RL-1500)h+=tag(xm+60,'start',1);
 
   // row labels
+  if(showWcut)for(const r of R.rows)for(const c of (r.wcuts||[])){const txt=mm(c.len),fz=Math.min(fs*.8,r.w*.62),tw=txt.length*fz*.62+50,bh=Math.min(fz*1.3,r.w-16),x=c.side==='L'?c.x-40-tw:c.x+40;
+    h+=`<g class="s-wcut" pointer-events="none"><rect x="${x}" y="${r.cy-bh/2}" width="${tw}" height="${bh}" rx="${bh*.25}"/><text class="s-t" x="${x+tw/2}" y="${r.cy}" text-anchor="middle" dominant-baseline="central" font-size="${fz}">${txt}</text></g>`;}
   h+=`<text class="s-t s-c" x="-90" y="-110" text-anchor="end" font-size="${fs*.8}">Left wall cut</text>`;
   h+=`<text class="s-t s-m" x="${RL+90}" y="-110" font-size="${fs*.8}">Right end</text>`;
   for(const r of R.rows){const cy=r.cy;
@@ -678,10 +692,10 @@ function renderTable(R){
     <td class="n lw"><span class="cutWrap"><input class="cutIn${r.manual?' man':''}"${locked?' disabled':''} type="number" inputmode="numeric" min="1" max="${R.L}" step="1" data-r="${r.i}" value="${Math.round(r.s)}" aria-label="Row ${r.i+1} left wall piece (mm)">${r.manual?`<button type="button" class="clr"${locked?' disabled':''} data-clr="${r.i}" title="Back to the planned length" aria-label="Clear row ${r.i+1} manual length">×</button>`:''}</span></td><td class="src">${r.manual?'<b>Your length</b> · ':''}${r.sSrc}${r.short?' <span class="chip cut">Short piece</span>':''}</td>
     <td class="n">${r.stag==null?'—':mm(r.stag)}${r.stagBad?' <span class="chip cut">Too close</span>':''}</td>
     <td class="n">${r.full}</td><td class="n">${r.e?mm(r.e):'—'}</td><td class="src">${r.eSrc||'Ends on a full board'}</td>
-    <td>${r.notch?`<span class="chip cut">${r.notch} piece${r.notch>1?'s':''}</span>`:''}</td></tr>`;}).join('');
+    <td>${(r.wcuts||[]).length?`<span class="wcl">✂ ${r.wcuts.map(c=>mm(c.len)).join(' · ')}</span> `:''}${r.notch?`<span class="chip cut">${r.notch} notch${r.notch>1?'es':''}</span>`:''}</td></tr>`;}).join('');
 }
 
-var showLast=true;try{showLast=localStorage.getItem('show-last')!=='0'}catch(e){}
+var showLast=true,showWcut=true;try{showWcut=localStorage.getItem('show-wcut')!=='0'}catch(e){}try{showLast=localStorage.getItem('show-last')!=='0'}catch(e){}
 var rowMode=false,selRow=null;
 let R=null,HL=null,ZOOM=1;try{ZOOM=Math.min(6,Math.max(1,+localStorage.getItem('loft-zoom')||1));}catch(e){}
 function setZoom(z,cx,cy){z=Math.min(6,Math.max(1,z));const sc=document.querySelector('.planScroll'),svg=$('plan');if(Math.abs(z-ZOOM)<1e-3)return;
@@ -903,6 +917,9 @@ $('lineUp').addEventListener('click',()=>{lastPushT=0;EX.lineRow--;update();});
 $('lineDn').addEventListener('click',()=>{lastPushT=0;EX.lineRow++;update();});
 $('zIn').addEventListener('click',()=>setZoom(ZOOM*1.4));$('zOut').addEventListener('click',()=>setZoom(ZOOM/1.4));
 $('zFit').addEventListener('click',()=>setZoom(1));
+$('wcutBtn').setAttribute('aria-pressed',String(showWcut));
+$('wcutBtn').addEventListener('click',()=>{showWcut=!showWcut;$('wcutBtn').setAttribute('aria-pressed',String(showWcut));try{localStorage.setItem('show-wcut',showWcut?'1':'0')}catch(e){}
+  if(R&&!R.empty){const p=read();renderPlan(typeof geo==='function'?geo(p):p,R);}});
 $('lastBtn').setAttribute('aria-pressed',String(showLast));
 $('lastBtn').addEventListener('click',()=>{showLast=!showLast;$('lastBtn').setAttribute('aria-pressed',String(showLast));try{localStorage.setItem('show-last',showLast?'1':'0')}catch(e){}
   if(R&&!R.empty){const p=read();renderPlan(typeof geo==='function'?geo(p):p,R);}});
